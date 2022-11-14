@@ -34,6 +34,19 @@ impl std::ops::Add for Num {
     }
 }
 
+impl std::ops::Sub for Num {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Num::Int(a), Num::Int(b)) => Num::Int(a - b),
+            (Num::Int(a), Num::Float(b)) => Num::Float(a as f64 - b),
+            (Num::Float(a), Num::Int(b)) => Num::Float(a - b as f64),
+            (Num::Float(a), Num::Float(b)) => Num::Float(a - b),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Op {
     // Stack manipulation
@@ -88,7 +101,15 @@ pub fn execute(mut state: State, op: &Op) -> Result<State, (State, &'static str)
         Op::Add => {
             let a = state.stack.pop().expect("failed to pop item from stack");
             let b = state.stack.pop().expect("failed to pop item from stack");
-            state.stack.push(a + b);
+            state.stack.push(b + a);
+        }
+        Op::Subtract if stack_size < 2 => {
+            return Err((state, "requires at least two items on stack"));
+        }
+        Op::Subtract => {
+            let a = state.stack.pop().expect("failed to pop item from stack");
+            let b = state.stack.pop().expect("failed to pop item from stack");
+            state.stack.push(b - a);
         }
         _ => todo!(),
     };
@@ -223,5 +244,33 @@ mod tests {
     #[should_panic(expected = "requires at least two items on stack")]
     fn add_errors_with_stack_of_one() {
         run_and_compare_stack(&[Op::Push(42.into()), Op::Add], [42]);
+    }
+
+    #[test]
+    fn subtract_works() {
+        run_and_compare_stack(
+            &[Op::Push(62.into()), Op::Push(20.into()), Op::Subtract],
+            [42],
+        );
+    }
+
+    #[test]
+    fn subtract_works_for_mixed_types() {
+        run_and_compare_stack(
+            &[Op::Push(44.into()), Op::Push(1.5.into()), Op::Subtract],
+            [42.5],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least two items on stack")]
+    fn subtract_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::Subtract], [42]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least two items on stack")]
+    fn subtract_errors_with_stack_of_one() {
+        run_and_compare_stack(&[Op::Push(42.into()), Op::Subtract], [42]);
     }
 }
