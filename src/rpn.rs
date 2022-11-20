@@ -47,6 +47,19 @@ impl std::ops::Sub for Num {
     }
 }
 
+impl std::ops::Mul for Num {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Num::Int(a), Num::Int(b)) => Num::Int(a * b),
+            (Num::Int(a), Num::Float(b)) => Num::Float(a as f64 * b),
+            (Num::Float(a), Num::Int(b)) => Num::Float(a * b as f64),
+            (Num::Float(a), Num::Float(b)) => Num::Float(a * b),
+        }
+    }
+}
+
 impl std::ops::Div for Num {
     type Output = Self;
 
@@ -137,6 +150,14 @@ pub fn execute(mut state: State, op: &Op) -> Result<State, (State, &'static str)
             let a = state.stack.pop().expect("failed to pop item from stack");
             let b = state.stack.pop().expect("failed to pop item from stack");
             state.stack.push(b - a);
+        }
+        Op::Multiply if stack_size < 2 => {
+            return Err((state, "requires at least two items on stack"));
+        }
+        Op::Multiply => {
+            let a = state.stack.pop().expect("failed to pop item from stack");
+            let b = state.stack.pop().expect("failed to pop item from stack");
+            state.stack.push(b * a);
         }
         Op::Divide if stack_size < 2 => {
             return Err((state, "requires at least two items on stack"));
@@ -313,6 +334,34 @@ mod tests {
     #[should_panic(expected = "requires at least two items on stack")]
     fn subtract_errors_with_stack_of_one() {
         run_and_compare_stack(&[Op::Push(42.into()), Op::Subtract], [42]);
+    }
+
+    #[test]
+    fn multiply_works() {
+        run_and_compare_stack(
+            &[Op::Push(21.into()), Op::Push(2.into()), Op::Multiply],
+            [42],
+        );
+    }
+
+    #[test]
+    fn multiply_works_for_mixed_types() {
+        run_and_compare_stack(
+            &[Op::Push(3.into()), Op::Push(1.5.into()), Op::Multiply],
+            [4.5],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least two items on stack")]
+    fn multiply_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::Multiply], [42]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least two items on stack")]
+    fn multiply_errors_with_stack_of_one() {
+        run_and_compare_stack(&[Op::Push(42.into()), Op::Multiply], [42]);
     }
 
     #[test]
