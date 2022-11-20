@@ -1,12 +1,21 @@
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct State {
-    stack: Vec<Num>,
+    pub stack: Vec<Num>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Num {
     Int(i128),
     Float(f64),
+}
+
+impl std::fmt::Display for Num {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Int(n) => write!(f, "{n}"),
+            Self::Float(n) => write!(f, "{n}"),
+        }
+    }
 }
 
 impl From<i128> for Num {
@@ -84,7 +93,7 @@ impl std::ops::Neg for Num {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Op {
     // Stack manipulation
     Push(Num),
