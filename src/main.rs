@@ -81,7 +81,13 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
             Event::Key(KeyEvent {
                 code: KeyCode::Enter,
                 ..
-            }) => state = insert_input(state),
+            }) => {
+                state = if state.input.is_empty() {
+                    push(state)
+                } else {
+                    insert_input(state)
+                };
+            }
             _ => (),
         }
 
@@ -93,11 +99,20 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
     }
 }
 
-/// Updates state by inserting the current input, noop otherwise.
-/// Updates history appropriately as well.
+/// If the stack is non-empty, push the last element again, noop
+/// otherwise.
+fn push(mut state: State) -> State {
+    if let Some(&num) = state.calc_state.stack.last() {
+        let op = Op::Push(num);
+        state = try_op(state, op);
+    }
+    state
+}
+
+/// Inserts the current input if any, noop otherwise.
 fn insert_input(mut state: State) -> State {
     if !state.input.is_empty() {
-        let num = i128::from_str_radix(&state.input, 10).expect("Invalid number");
+        let num = state.input.parse::<i128>().expect("Invalid number");
         let op = Op::Push(num.into());
         state = try_op(state, op);
         state.input.clear();
