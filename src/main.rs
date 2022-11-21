@@ -23,6 +23,7 @@ struct State {
     calc_state: rpn::State,
     history: VecDeque<(Op, rpn::State)>,
     input: String,
+    message: Option<&'static str>,
 }
 
 fn main() -> Result<()> {
@@ -83,7 +84,12 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
             }) => state = insert_input(state),
             _ => (),
         }
+
         terminal.draw(|f| draw_ui(&state, f))?;
+
+        if state.message.is_some() {
+            state.message = None;
+        }
     }
 }
 
@@ -103,12 +109,16 @@ fn insert_input(mut state: State) -> State {
 /// updated state. Updates history.
 fn try_op(mut state: State, op: Op) -> State {
     let current_state = state.calc_state.clone();
-    if let Ok(new_state) = rpn::run(state.calc_state, &[op]) {
-        state.history.push_back((op, current_state));
-        state.calc_state = new_state;
-    } else {
-        state.calc_state = current_state;
-    };
+    match rpn::execute(state.calc_state, &op) {
+        Ok(new_state) => {
+            state.history.push_back((op, current_state));
+            state.calc_state = new_state;
+        }
+        Err((new_state, message)) => {
+            state.calc_state = new_state;
+            state.message = Some(message);
+        }
+    }
     state
 }
 
@@ -161,7 +171,7 @@ fn draw_ui(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
     .block(Block::default().title("History").borders(Borders::ALL));
     f.render_widget(history_box, top_section[2]);
 
-    let input_box = Paragraph::new(state.input.clone())
+    let input_box = Paragraph::new(state.message.unwrap_or(&state.input))
         .block(Block::default().title("Input").borders(Borders::ALL))
         .wrap(Wrap { trim: false });
     f.render_widget(input_box, root[1]);
