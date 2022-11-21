@@ -52,8 +52,11 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                 code: KeyCode::Char(c),
                 ..
             }) => match c {
-                '0'..='9' => {
-                    state.input.push(c);
+                '0'..='9' => state.input.push(c),
+                '.' => {
+                    if !state.input.contains('.') {
+                        state.input.push(c)
+                    }
                 }
                 'k' => state = try_op(state, Op::Drop),
                 'n' => state = try_op(state, Op::Negate),
@@ -112,8 +115,13 @@ fn push(mut state: State) -> State {
 /// Inserts the current input if any, noop otherwise.
 fn insert_input(mut state: State) -> State {
     if !state.input.is_empty() {
-        let num = state.input.parse::<i128>().expect("Invalid number");
-        let op = Op::Push(num.into());
+        let num = state
+            .input
+            .parse::<i128>()
+            .map(rpn::Num::from)
+            .or(state.input.parse::<f64>().map(rpn::Num::from))
+            .expect("Invalid number");
+        let op = Op::Push(num);
         state = try_op(state, op);
         state.input.clear();
     }
