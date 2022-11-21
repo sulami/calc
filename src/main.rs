@@ -88,16 +88,21 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                 'Q' => return Ok(()),
                 _ => (),
             },
-            Event::Key(KeyEvent {
-                code: KeyCode::Enter,
-                ..
-            }) => {
-                state = if state.input.is_empty() {
-                    push(state)
-                } else {
-                    insert_input(state)
-                };
-            }
+            Event::Key(KeyEvent { code: key, .. }) => match key {
+                KeyCode::Enter => {
+                    state = if state.input.is_empty() {
+                        push(state)
+                    } else {
+                        insert_input(state)
+                    }
+                }
+                KeyCode::Backspace => {
+                    if !state.input.is_empty() {
+                        let _ = state.input.pop();
+                    }
+                }
+                _ => (),
+            },
             _ => (),
         }
 
