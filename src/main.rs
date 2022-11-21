@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::io;
 
 use anyhow::Result;
@@ -21,7 +20,7 @@ mod rpn;
 #[derive(Default)]
 struct State {
     calc_state: rpn::State,
-    history: VecDeque<(Op, rpn::State)>,
+    history: Vec<(Op, rpn::State)>,
     input: String,
     message: Option<&'static str>,
 }
@@ -58,6 +57,7 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                         state.input.push(c)
                     }
                 }
+                'C' => state = try_op(state, Op::Clear),
                 'k' => state = try_op(state, Op::Drop),
                 'n' => {
                     state = insert_input(state);
@@ -65,6 +65,7 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                 }
                 'r' => state = try_op(state, Op::Rotate),
                 's' => state = try_op(state, Op::Swap),
+                'u' => state = undo(state),
                 '+' => {
                     state = insert_input(state);
                     state = try_op(state, Op::Add);
@@ -146,13 +147,22 @@ fn try_op(mut state: State, op: Op) -> State {
     let current_state = state.calc_state.clone();
     match state.calc_state.execute(&op) {
         Ok(new_state) => {
-            state.history.push_back((op, current_state));
+            state.history.push((op, current_state));
             state.calc_state = new_state;
         }
         Err((new_state, message)) => {
             state.calc_state = new_state;
             state.message = Some(message);
         }
+    }
+    state
+}
+
+/// If there is any history, pops off the last entry and resets to
+/// that state.
+fn undo(mut state: State) -> State {
+    if let Some((_op, new_state)) = state.history.pop() {
+        state.calc_state = new_state;
     }
     state
 }
@@ -225,6 +235,7 @@ fn format_history_event(state: &rpn::State, op: &Op) -> String {
         ),
         Op::Drop => format!("<- {}", state.stack.first().unwrap()),
         Op::Negate => format!("(-) {}", state.stack.get(stack_size - 1).unwrap()),
+        Op::Clear => "- clear -".to_string(),
         Op::Add => format!(
             "{} + {}",
             state.stack.get(stack_size - 2).unwrap(),

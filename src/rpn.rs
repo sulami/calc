@@ -11,6 +11,8 @@
 //! state = execute(state, Op::Push(42.into()))?;
 //! ```
 
+#![allow(dead_code)]
+
 #[derive(Clone, Debug, Default)]
 pub struct State {
     pub stack: Vec<Num>,
@@ -39,6 +41,7 @@ impl State {
                     self.stack.insert(0, item);
                 }
             }
+            Op::Clear => self.stack.clear(),
             Op::Add if stack_size < 2 => {
                 return Err((self, "requires at least two items on stack"));
             }
@@ -342,6 +345,16 @@ mod tests {
     #[test]
     fn rotate_is_noop_on_stack_of_one() {
         run_and_compare_stack(&[Op::Push(42.into()), Op::Rotate], [42]);
+    }
+
+    #[test]
+    fn clear_clears_stack() {
+        run_and_compare_stack(&[Op::Push(42.into()), Op::Clear], Vec::<Num>::new());
+    }
+
+    #[test]
+    fn clear_noop_on_empty_stack() {
+        run_and_compare_stack(&[Op::Clear], Vec::<Num>::new());
     }
 
     #[test]
