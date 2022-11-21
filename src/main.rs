@@ -78,6 +78,10 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                     state = insert_input(state);
                     state = try_op(state, Op::Divide);
                 }
+                '^' => {
+                    state = insert_input(state);
+                    state = try_op(state, Op::Pow);
+                }
                 'Q' => return Ok(()),
                 _ => (),
             },
@@ -230,6 +234,11 @@ fn format_history_event(state: &rpn::State, op: &Op) -> String {
         ),
         Op::Divide => format!(
             "{} / {}",
+            state.stack.get(stack_size - 2).unwrap(),
+            state.stack.get(stack_size - 1).unwrap()
+        ),
+        Op::Pow => format!(
+            "{} ^ {}",
             state.stack.get(stack_size - 2).unwrap(),
             state.stack.get(stack_size - 1).unwrap()
         ),

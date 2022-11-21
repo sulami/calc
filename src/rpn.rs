@@ -78,6 +78,22 @@ impl State {
                 let a = self.stack.pop().expect("failed to pop item from stack");
                 self.stack.push(-a);
             }
+            Op::Pow if stack_size < 2 => {
+                return Err((self, "requires at least two items on stack"));
+            }
+            Op::Pow => {
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                let b = self.stack.pop().expect("failed to pop item from stack");
+                match b.pow(a) {
+                    Ok(result) => self.stack.push(result),
+                    Err(msg) => {
+                        // Undo, push back onto stack.
+                        self.stack.push(b);
+                        self.stack.push(a);
+                        return Err((self, msg));
+                    }
+                }
+            }
             _ => todo!(),
         };
         Ok(self)
@@ -98,6 +114,21 @@ impl State {
 pub enum Num {
     Int(i128),
     Float(f64),
+}
+
+impl Num {
+    /// Unwrapping power, works for both i128 and f64, as well as
+    /// mixes of both. Refuses negative exponents.
+    fn pow(self, rhs: Self) -> Result<Self, &'static str> {
+        match (self, rhs) {
+            (_, Self::Int(x)) if x < 0 => Err("negative exponent"),
+            (_, Self::Float(x)) if x < 0.0 => Err("negative exponent"),
+            (Self::Int(a), Self::Int(b)) => Ok(Self::Int(a.pow(b as u32))),
+            (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a.powf(b as f64))),
+            (Self::Int(a), Self::Float(b)) => Ok(Self::Float((a as f64).powf(b))),
+            (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a.powf(b))),
+        }
+    }
 }
 
 impl std::fmt::Display for Num {
@@ -126,10 +157,10 @@ impl std::ops::Add for Num {
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Num::Int(a), Num::Int(b)) => Num::Int(a + b),
-            (Num::Int(a), Num::Float(b)) => Num::Float(a as f64 + b),
-            (Num::Float(a), Num::Int(b)) => Num::Float(a + b as f64),
-            (Num::Float(a), Num::Float(b)) => Num::Float(a + b),
+            (Self::Int(a), Self::Int(b)) => Self::Int(a + b),
+            (Self::Int(a), Self::Float(b)) => Self::Float(a as f64 + b),
+            (Self::Float(a), Self::Int(b)) => Self::Float(a + b as f64),
+            (Self::Float(a), Self::Float(b)) => Self::Float(a + b),
         }
     }
 }
@@ -139,10 +170,10 @@ impl std::ops::Sub for Num {
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Num::Int(a), Num::Int(b)) => Num::Int(a - b),
-            (Num::Int(a), Num::Float(b)) => Num::Float(a as f64 - b),
-            (Num::Float(a), Num::Int(b)) => Num::Float(a - b as f64),
-            (Num::Float(a), Num::Float(b)) => Num::Float(a - b),
+            (Self::Int(a), Self::Int(b)) => Self::Int(a - b),
+            (Self::Int(a), Self::Float(b)) => Self::Float(a as f64 - b),
+            (Self::Float(a), Self::Int(b)) => Self::Float(a - b as f64),
+            (Self::Float(a), Self::Float(b)) => Self::Float(a - b),
         }
     }
 }
@@ -152,10 +183,10 @@ impl std::ops::Mul for Num {
 
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Num::Int(a), Num::Int(b)) => Num::Int(a * b),
-            (Num::Int(a), Num::Float(b)) => Num::Float(a as f64 * b),
-            (Num::Float(a), Num::Int(b)) => Num::Float(a * b as f64),
-            (Num::Float(a), Num::Float(b)) => Num::Float(a * b),
+            (Self::Int(a), Self::Int(b)) => Self::Int(a * b),
+            (Self::Int(a), Self::Float(b)) => Self::Float(a as f64 * b),
+            (Self::Float(a), Self::Int(b)) => Self::Float(a * b as f64),
+            (Self::Float(a), Self::Float(b)) => Self::Float(a * b),
         }
     }
 }
@@ -165,10 +196,10 @@ impl std::ops::Div for Num {
 
     fn div(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Num::Int(a), Num::Int(b)) => Num::Float(a as f64 / b as f64),
-            (Num::Int(a), Num::Float(b)) => Num::Float(a as f64 / b),
-            (Num::Float(a), Num::Int(b)) => Num::Float(a / b as f64),
-            (Num::Float(a), Num::Float(b)) => Num::Float(a / b),
+            (Self::Int(a), Self::Int(b)) => Self::Float(a as f64 / b as f64),
+            (Self::Int(a), Self::Float(b)) => Self::Float(a as f64 / b),
+            (Self::Float(a), Self::Int(b)) => Self::Float(a / b as f64),
+            (Self::Float(a), Self::Float(b)) => Self::Float(a / b),
         }
     }
 }
@@ -178,8 +209,8 @@ impl std::ops::Neg for Num {
 
     fn neg(self) -> Self::Output {
         match self {
-            Num::Int(a) => Num::Int(-a),
-            Num::Float(a) => Num::Float(-a),
+            Self::Int(a) => Self::Int(-a),
+            Self::Float(a) => Self::Float(-a),
         }
     }
 }
@@ -433,5 +464,67 @@ mod tests {
     #[should_panic(expected = "stack is empty")]
     fn negate_errors_on_empty_stack() {
         run_and_compare_stack(&[Op::Negate], [42]);
+    }
+
+    #[test]
+    fn pow_works() {
+        run_and_compare_stack(&[Op::Push(2.into()), Op::Push(4.into()), Op::Pow], [16]);
+    }
+
+    #[test]
+    fn pow_works_with_float_exponent() {
+        run_and_compare_stack(&[Op::Push(2.into()), Op::Push(4.0.into()), Op::Pow], [16.0]);
+    }
+
+    #[test]
+    fn pow_works_with_float_base() {
+        run_and_compare_stack(&[Op::Push(2.0.into()), Op::Push(4.into()), Op::Pow], [16.0]);
+    }
+
+    #[test]
+    fn pow_works_with_float_both() {
+        run_and_compare_stack(
+            &[Op::Push(2.0.into()), Op::Push(4.0.into()), Op::Pow],
+            [16.0],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least two items on stack")]
+    fn pow_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::Pow], [42]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least two items on stack")]
+    fn pow_errors_with_stack_of_one() {
+        run_and_compare_stack(&[Op::Push(42.into()), Op::Pow], [42]);
+    }
+
+    #[test]
+    #[should_panic(expected = "negative exponent")]
+    fn pow_refuses_negative_exponent() {
+        run_and_compare_stack(
+            &[Op::Push(2.into()), Op::Push((-4).into()), Op::Pow],
+            [16.0],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "negative exponent")]
+    fn pow_refuses_negative_float_exponent() {
+        run_and_compare_stack(
+            &[Op::Push(2.into()), Op::Push((-4.0).into()), Op::Pow],
+            [16.0],
+        );
+    }
+
+    #[test]
+    fn pow_keeps_stack_intact_on_error() {
+        let ops = &[Op::Push(2.into()), Op::Push((-4).into()), Op::Pow];
+        match State::default().run(ops) {
+            Err((state, _)) => assert_eq!(state.stack, make_stack([2, -4])),
+            _ => panic!("ops ran successfully"),
+        }
     }
 }
