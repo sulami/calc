@@ -14,12 +14,14 @@ use tui::{
     Frame, Terminal,
 };
 
+use rpn::Op;
+
 mod rpn;
 
 #[derive(Default)]
 struct State {
     calc_state: rpn::State,
-    history: VecDeque<(rpn::Op, rpn::State)>,
+    history: VecDeque<(Op, rpn::State)>,
     input: String,
 }
 
@@ -52,26 +54,26 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                 '0'..='9' => {
                     state.input.push(c);
                 }
-                'k' => state = try_op(state, rpn::Op::Drop),
-                'r' => state = try_op(state, rpn::Op::Rotate),
-                's' => state = try_op(state, rpn::Op::Swap),
+                'k' => state = try_op(state, Op::Drop),
+                'r' => state = try_op(state, Op::Rotate),
+                's' => state = try_op(state, Op::Swap),
                 '+' => {
                     state = insert_input(state);
-                    state = try_op(state, rpn::Op::Add);
+                    state = try_op(state, Op::Add);
                 }
                 '-' => {
                     state = insert_input(state);
-                    state = try_op(state, rpn::Op::Subtract);
+                    state = try_op(state, Op::Subtract);
                 }
                 '*' => {
                     state = insert_input(state);
-                    state = try_op(state, rpn::Op::Multiply);
+                    state = try_op(state, Op::Multiply);
                 }
                 '/' => {
                     state = insert_input(state);
-                    state = try_op(state, rpn::Op::Divide);
+                    state = try_op(state, Op::Divide);
                 }
-                '~' => state = try_op(state, rpn::Op::Negate),
+                '~' => state = try_op(state, Op::Negate),
                 'Q' => return Ok(()),
                 _ => (),
             },
@@ -90,7 +92,7 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
 fn insert_input(mut state: State) -> State {
     if !state.input.is_empty() {
         let num = i128::from_str_radix(&state.input, 10).expect("Invalid number");
-        let op = rpn::Op::Push(num.into());
+        let op = Op::Push(num.into());
         state = try_op(state, op);
         state.input.clear();
     }
@@ -99,7 +101,7 @@ fn insert_input(mut state: State) -> State {
 
 /// Attempts to apply op to the current state, returning a potentially
 /// updated state. Updates history.
-fn try_op(mut state: State, op: rpn::Op) -> State {
+fn try_op(mut state: State, op: Op) -> State {
     let current_state = state.calc_state.clone();
     if let Ok(new_state) = rpn::run(state.calc_state, &[op]) {
         state.history.push_back((op, current_state));
@@ -166,34 +168,34 @@ fn draw_ui(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
 }
 
 /// Formats a history event for display to the user.
-fn format_history_event(state: &rpn::State, op: &rpn::Op) -> String {
+fn format_history_event(state: &rpn::State, op: &Op) -> String {
     let stack_size = state.stack.len();
     match op {
-        rpn::Op::Push(n) => format!("-> {n}"),
-        rpn::Op::Rotate => ">>>".to_string(),
-        rpn::Op::Swap => format!(
+        Op::Push(n) => format!("-> {n}"),
+        Op::Rotate => ">>>".to_string(),
+        Op::Swap => format!(
             "{} <-> {}",
             state.stack.get(stack_size - 2).unwrap(),
             state.stack.get(stack_size - 1).unwrap()
         ),
-        rpn::Op::Drop => format!("<- {}", state.stack.first().unwrap()),
-        rpn::Op::Negate => format!("(-) {}", state.stack.get(stack_size - 1).unwrap()),
-        rpn::Op::Add => format!(
+        Op::Drop => format!("<- {}", state.stack.first().unwrap()),
+        Op::Negate => format!("(-) {}", state.stack.get(stack_size - 1).unwrap()),
+        Op::Add => format!(
             "{} + {}",
             state.stack.get(stack_size - 2).unwrap(),
             state.stack.get(stack_size - 1).unwrap()
         ),
-        rpn::Op::Subtract => format!(
+        Op::Subtract => format!(
             "{} - {}",
             state.stack.get(stack_size - 2).unwrap(),
             state.stack.get(stack_size - 1).unwrap()
         ),
-        rpn::Op::Multiply => format!(
+        Op::Multiply => format!(
             "{} × {}",
             state.stack.get(stack_size - 2).unwrap(),
             state.stack.get(stack_size - 1).unwrap()
         ),
-        rpn::Op::Divide => format!(
+        Op::Divide => format!(
             "{} / {}",
             state.stack.get(stack_size - 2).unwrap(),
             state.stack.get(stack_size - 1).unwrap()
