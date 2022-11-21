@@ -59,7 +59,10 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                     }
                 }
                 'k' => state = try_op(state, Op::Drop),
-                'n' => state = try_op(state, Op::Negate),
+                'n' => {
+                    state = insert_input(state);
+                    state = try_op(state, Op::Negate);
+                }
                 'r' => state = try_op(state, Op::Rotate),
                 's' => state = try_op(state, Op::Swap),
                 '+' => {
