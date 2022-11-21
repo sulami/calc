@@ -1,6 +1,97 @@
+//! A reverse Polish notiation calculator core.
+//!
+//! This module is meant to be useful in isolation, and should be
+//! usable to build different calculator frontends or otherwise
+//! include RPN calculator functionality in existing programs.
+//!
+//! Example usage:
+//!
+//! ```
+//! let mut state = State::default();
+//! state = execute(state, Op::Push(42.into()))?;
+//! ```
+
 #[derive(Clone, Debug, Default)]
 pub struct State {
     pub stack: Vec<Num>,
+}
+
+impl State {
+    /// Executes a single operation on state, returning the new state. If
+    /// the operation fails, returns a tuple of the old state and an error
+    /// message.
+    pub fn execute(mut self, op: &Op) -> Result<Self, (Self, &'static str)> {
+        let stack_size = self.stack.len();
+        match op {
+            Op::Push(n) => self.stack.push(*n),
+            Op::Drop if stack_size < 1 => {
+                return Err((self, "stack is empty"));
+            }
+            Op::Drop => {
+                let _ = self.stack.pop();
+            }
+            Op::Swap if stack_size < 2 => {
+                return Err((self, "requires at least two items on stack"));
+            }
+            Op::Swap => self.stack.swap(stack_size - 1, stack_size - 2),
+            Op::Rotate => {
+                if let Some(item) = self.stack.pop() {
+                    self.stack.insert(0, item);
+                }
+            }
+            Op::Add if stack_size < 2 => {
+                return Err((self, "requires at least two items on stack"));
+            }
+            Op::Add => {
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                let b = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(b + a);
+            }
+            Op::Subtract if stack_size < 2 => {
+                return Err((self, "requires at least two items on stack"));
+            }
+            Op::Subtract => {
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                let b = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(b - a);
+            }
+            Op::Multiply if stack_size < 2 => {
+                return Err((self, "requires at least two items on stack"));
+            }
+            Op::Multiply => {
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                let b = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(b * a);
+            }
+            Op::Divide if stack_size < 2 => {
+                return Err((self, "requires at least two items on stack"));
+            }
+            Op::Divide => {
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                let b = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(b / a);
+            }
+            Op::Negate if stack_size < 1 => {
+                return Err((self, "stack is empty"));
+            }
+            Op::Negate => {
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(-a);
+            }
+            _ => todo!(),
+        };
+        Ok(self)
+    }
+
+    /// Executes a chain of instructions on state. Halts at the first
+    /// error and returns the state at that point as well as an error
+    /// message.
+    pub fn run<'a, I>(self, ops: I) -> Result<Self, (Self, &'static str)>
+    where
+        I: IntoIterator<Item = &'a Op>,
+    {
+        ops.into_iter().try_fold(self, Self::execute)
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -100,6 +191,7 @@ pub enum Op {
     Drop,
     Swap,
     Rotate,
+    Clear,
     // Artithmetic
     Add,
     Subtract,
@@ -110,6 +202,8 @@ pub enum Op {
     Modulo,
     Remainder,
     Invert,
+    Pow,
+    Sqrt,
     // Bitwise operations
     BitwiseAnd,
     BitwiseOr,
@@ -120,82 +214,6 @@ pub enum Op {
     ShiftRight,
     // Misc
     Rand,
-}
-
-/// Executes a single operation on state, returning the new state. If
-/// the operation fails, returns a tuple of the old state and an error
-/// message.
-pub fn execute(mut state: State, op: &Op) -> Result<State, (State, &'static str)> {
-    let stack_size = state.stack.len();
-    match op {
-        Op::Push(n) => state.stack.push(*n),
-        Op::Drop if stack_size < 1 => {
-            return Err((state, "stack is empty"));
-        }
-        Op::Drop => {
-            let _ = state.stack.pop();
-        }
-        Op::Swap if stack_size < 2 => {
-            return Err((state, "requires at least two items on stack"));
-        }
-        Op::Swap => state.stack.swap(stack_size - 1, stack_size - 2),
-        Op::Rotate => {
-            if let Some(item) = state.stack.pop() {
-                state.stack.insert(0, item);
-            }
-        }
-        Op::Add if stack_size < 2 => {
-            return Err((state, "requires at least two items on stack"));
-        }
-        Op::Add => {
-            let a = state.stack.pop().expect("failed to pop item from stack");
-            let b = state.stack.pop().expect("failed to pop item from stack");
-            state.stack.push(b + a);
-        }
-        Op::Subtract if stack_size < 2 => {
-            return Err((state, "requires at least two items on stack"));
-        }
-        Op::Subtract => {
-            let a = state.stack.pop().expect("failed to pop item from stack");
-            let b = state.stack.pop().expect("failed to pop item from stack");
-            state.stack.push(b - a);
-        }
-        Op::Multiply if stack_size < 2 => {
-            return Err((state, "requires at least two items on stack"));
-        }
-        Op::Multiply => {
-            let a = state.stack.pop().expect("failed to pop item from stack");
-            let b = state.stack.pop().expect("failed to pop item from stack");
-            state.stack.push(b * a);
-        }
-        Op::Divide if stack_size < 2 => {
-            return Err((state, "requires at least two items on stack"));
-        }
-        Op::Divide => {
-            let a = state.stack.pop().expect("failed to pop item from stack");
-            let b = state.stack.pop().expect("failed to pop item from stack");
-            state.stack.push(b / a);
-        }
-        Op::Negate if stack_size < 1 => {
-            return Err((state, "stack is empty"));
-        }
-        Op::Negate => {
-            let a = state.stack.pop().expect("failed to pop item from stack");
-            state.stack.push(-a);
-        }
-        _ => todo!(),
-    };
-    Ok(state)
-}
-
-/// Executes a chain of instructions on state. Halts at the first
-/// error and returns the state at that point as well as an error
-/// message.
-pub fn run<'a, I>(state: State, ops: I) -> Result<State, (State, &'static str)>
-where
-    I: IntoIterator<Item = &'a Op>,
-{
-    ops.into_iter().try_fold(state, execute)
 }
 
 #[cfg(test)]
@@ -219,7 +237,7 @@ mod tests {
         J: IntoIterator<Item = N>,
         N: Into<Num>,
     {
-        let state = run(State::default(), ops).expect("Failed to run ops");
+        let state = State::default().run(ops).expect("Failed to run ops");
         assert_eq!(state.stack, make_stack(expected));
     }
 

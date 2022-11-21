@@ -56,6 +56,7 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                     state.input.push(c);
                 }
                 'k' => state = try_op(state, Op::Drop),
+                'n' => state = try_op(state, Op::Negate),
                 'r' => state = try_op(state, Op::Rotate),
                 's' => state = try_op(state, Op::Swap),
                 '+' => {
@@ -74,7 +75,6 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                     state = insert_input(state);
                     state = try_op(state, Op::Divide);
                 }
-                '~' => state = try_op(state, Op::Negate),
                 'Q' => return Ok(()),
                 _ => (),
             },
@@ -124,7 +124,7 @@ fn insert_input(mut state: State) -> State {
 /// updated state. Updates history.
 fn try_op(mut state: State, op: Op) -> State {
     let current_state = state.calc_state.clone();
-    match rpn::execute(state.calc_state, &op) {
+    match state.calc_state.execute(&op) {
         Ok(new_state) => {
             state.history.push_back((op, current_state));
             state.calc_state = new_state;
