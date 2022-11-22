@@ -17,7 +17,7 @@ use std::fmt::{self, Debug, Display};
 
 #[derive(Clone, Debug, Default)]
 pub struct State {
-    pub stack: Vec<Num>,
+    stack: Vec<Num>,
 }
 
 impl State {
@@ -28,6 +28,29 @@ impl State {
         } else {
             Err(RPNError::RequiresStack(size))
         }
+    }
+
+    /// Returns a (cloned) Vec of the internal stack, from least
+    /// recently to most recently pushed.
+    pub fn stack_vec(&self) -> Vec<Num> {
+        self.stack.clone()
+    }
+
+    /// Returns the length of the internal stack.
+    pub fn stack_size(&self) -> usize {
+        self.stack.len()
+    }
+
+    /// Attempt to fetch an item from the internal stack. Note that
+    /// the most recently pushed item is at the end.
+    pub fn stack_get(&self, idx: usize) -> Option<&Num> {
+        self.stack.get(idx)
+    }
+
+    /// Attempt to fetch the last (most recently pushed) item from the
+    /// internal stack.
+    pub fn stack_last(&self) -> Option<&Num> {
+        self.stack.last()
     }
 
     /// Executes a single operation on state, returning the new state. If

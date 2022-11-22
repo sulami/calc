@@ -119,7 +119,7 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
 /// If the stack is non-empty, push the last element again, noop
 /// otherwise.
 fn push(mut state: State) -> State {
-    if let Some(&num) = state.calc_state.stack.last() {
+    if let Some(&num) = state.calc_state.stack_last() {
         let op = Op::Push(num);
         state = try_op(state, op);
     }
@@ -191,7 +191,7 @@ fn draw_ui(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
     let stack_box = List::new(
         state
             .calc_state
-            .stack
+            .stack_vec()
             .iter()
             .rev()
             .map(|i| ListItem::new(format!("{i}")))
@@ -217,8 +217,7 @@ fn draw_ui(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
     .block(Block::default().title("History").borders(Borders::ALL));
     f.render_widget(history_box, top_section[2]);
 
-    let message = state.message.clone();
-    let input_box = Paragraph::new(message.unwrap_or(state.input.clone()))
+    let input_box = Paragraph::new(state.message.clone().unwrap_or_else(|| state.input.clone()))
         .block(Block::default().title("Input").borders(Borders::ALL))
         .wrap(Wrap { trim: false });
     f.render_widget(input_box, root[1]);
@@ -226,44 +225,44 @@ fn draw_ui(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
 
 /// Formats a history event for display to the user.
 fn format_history_event(state: &rpn::State, op: &Op) -> String {
-    let stack_size = state.stack.len();
+    let stack_size = state.stack_size();
     match op {
         Op::Push(n) => format!("-> {n}"),
         Op::Rotate => ">>>".to_string(),
         Op::Swap => format!(
             "{} <-> {}",
-            state.stack.get(stack_size - 2).unwrap(),
-            state.stack.get(stack_size - 1).unwrap()
+            state.stack_get(stack_size - 2).unwrap(),
+            state.stack_get(stack_size - 1).unwrap()
         ),
-        Op::Drop => format!("<- {}", state.stack.last().unwrap()),
-        Op::Negate => format!("(-) {}", state.stack.last().unwrap()),
+        Op::Drop => format!("<- {}", state.stack_last().unwrap()),
+        Op::Negate => format!("(-) {}", state.stack_last().unwrap()),
         Op::Clear => "- clear -".to_string(),
         Op::Add => format!(
             "{} + {}",
-            state.stack.get(stack_size - 2).unwrap(),
-            state.stack.get(stack_size - 1).unwrap()
+            state.stack_get(stack_size - 2).unwrap(),
+            state.stack_get(stack_size - 1).unwrap()
         ),
         Op::Subtract => format!(
             "{} - {}",
-            state.stack.get(stack_size - 2).unwrap(),
-            state.stack.get(stack_size - 1).unwrap()
+            state.stack_get(stack_size - 2).unwrap(),
+            state.stack_get(stack_size - 1).unwrap()
         ),
         Op::Multiply => format!(
             "{} × {}",
-            state.stack.get(stack_size - 2).unwrap(),
-            state.stack.get(stack_size - 1).unwrap()
+            state.stack_get(stack_size - 2).unwrap(),
+            state.stack_get(stack_size - 1).unwrap()
         ),
         Op::Divide => format!(
             "{} / {}",
-            state.stack.get(stack_size - 2).unwrap(),
-            state.stack.get(stack_size - 1).unwrap()
+            state.stack_get(stack_size - 2).unwrap(),
+            state.stack_get(stack_size - 1).unwrap()
         ),
         Op::Pow => format!(
             "{} ^ {}",
-            state.stack.get(stack_size - 2).unwrap(),
-            state.stack.get(stack_size - 1).unwrap()
+            state.stack_get(stack_size - 2).unwrap(),
+            state.stack_get(stack_size - 1).unwrap()
         ),
-        Op::Absolute => format!("|{}|", state.stack.last().unwrap()),
+        Op::Absolute => format!("|{}|", state.stack_last().unwrap()),
         _ => format!("{state:?} -> {op:?}"),
     }
 }
