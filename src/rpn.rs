@@ -8,7 +8,7 @@
 //!
 //! ```
 //! let mut state = State::default();
-//! state = execute(state, Op::Push(42.into()))?;
+//! state = state.execute(Op::Push(42.into()))?;
 //! ```
 
 #![allow(dead_code)]
@@ -97,6 +97,13 @@ impl State {
                     }
                 }
             }
+            Op::Absolute if stack_size < 1 => {
+                return Err((self, "stack is empty"));
+            }
+            Op::Absolute => {
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(a.abs());
+            }
             _ => todo!(),
         };
         Ok(self)
@@ -130,6 +137,14 @@ impl Num {
             (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a.powf(b as f64))),
             (Self::Int(a), Self::Float(b)) => Ok(Self::Float((a as f64).powf(b))),
             (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a.powf(b))),
+        }
+    }
+
+    /// Unwrapping abs.
+    fn abs(self) -> Self {
+        match self {
+            Self::Int(n) => Self::Int(n.abs()),
+            Self::Float(n) => Self::Float(n.abs()),
         }
     }
 }
@@ -542,5 +557,15 @@ mod tests {
             Err((state, _)) => assert_eq!(state.stack, make_stack([2, -4])),
             _ => panic!("ops ran successfully"),
         }
+    }
+
+    #[test]
+    fn absolute_works() {
+        run_and_compare_stack(&[Op::Push((-42).into()), Op::Absolute], [42]);
+    }
+
+    #[test]
+    fn absolute_works_for_floats() {
+        run_and_compare_stack(&[Op::Push((-42.5).into()), Op::Absolute], [42.5]);
     }
 }

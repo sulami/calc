@@ -57,6 +57,7 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                         state.input.push(c)
                     }
                 }
+                'A' => state = try_op(state, Op::Absolute),
                 'C' => state = try_op(state, Op::Clear),
                 'k' => state = try_op(state, Op::Drop),
                 'n' => {
@@ -261,6 +262,7 @@ fn format_history_event(state: &rpn::State, op: &Op) -> String {
             state.stack.get(stack_size - 2).unwrap(),
             state.stack.get(stack_size - 1).unwrap()
         ),
+        Op::Absolute => format!("|{}|", state.stack.last().unwrap()),
         _ => format!("{state:?} -> {op:?}"),
     }
 }
