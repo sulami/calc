@@ -65,6 +65,10 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                     state = try_op(state, Op::Negate);
                 }
                 'r' => state = try_op(state, Op::Rotate),
+                'R' => {
+                    state = insert_input(state);
+                    state = try_op(state, Op::Remainder);
+                }
                 's' => state = try_op(state, Op::Swap),
                 'u' => state = undo(state),
                 '+' => {
@@ -86,6 +90,10 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                 '^' => {
                     state = insert_input(state);
                     state = try_op(state, Op::Pow);
+                }
+                '%' => {
+                    state = insert_input(state);
+                    state = try_op(state, Op::Modulo);
                 }
                 'Q' => return Ok(()),
                 _ => (),
@@ -282,6 +290,16 @@ fn format_history_event(state: &rpn::State, op: &Op) -> String {
             state.stack_get(stack_size - 1).unwrap()
         ),
         Op::Absolute => format!("|{}|", state.stack_last().unwrap()),
+        Op::Modulo => format!(
+            "{} mod {}",
+            state.stack_get(stack_size - 2).unwrap(),
+            state.stack_get(stack_size - 1).unwrap()
+        ),
+        Op::Remainder => format!(
+            "{} rem {}",
+            state.stack_get(stack_size - 2).unwrap(),
+            state.stack_get(stack_size - 1).unwrap()
+        ),
         _ => format!("{state:?} -> {op:?}"),
     }
 }

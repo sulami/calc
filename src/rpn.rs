@@ -77,27 +77,30 @@ impl State {
             Op::Clear => self.stack.clear(),
             Op::Add => {
                 self.require_stack(2)?;
-                let a = self.stack.pop().expect("failed to pop item from stack");
                 let b = self.stack.pop().expect("failed to pop item from stack");
-                self.stack.push(b + a);
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(a + b);
             }
             Op::Subtract => {
                 self.require_stack(2)?;
-                let a = self.stack.pop().expect("failed to pop item from stack");
                 let b = self.stack.pop().expect("failed to pop item from stack");
-                self.stack.push(b - a);
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(a - b);
             }
             Op::Multiply => {
                 self.require_stack(2)?;
-                let a = self.stack.pop().expect("failed to pop item from stack");
                 let b = self.stack.pop().expect("failed to pop item from stack");
-                self.stack.push(b * a);
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(a * b);
             }
             Op::Divide => {
                 self.require_stack(2)?;
-                let a = self.stack.pop().expect("failed to pop item from stack");
+                if self.stack_last().unwrap().is_zero() {
+                    return Err(RPNError::DivisionByZero);
+                }
                 let b = self.stack.pop().expect("failed to pop item from stack");
-                self.stack.push(b / a);
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(a / b);
             }
             Op::Negate => {
                 self.require_stack(1)?;
@@ -106,22 +109,53 @@ impl State {
             }
             Op::Pow => {
                 self.require_stack(2)?;
-                let a = self.stack.pop().expect("failed to pop item from stack");
-                let b = self.stack.pop().expect("failed to pop item from stack");
-                match b.pow(a) {
-                    Ok(result) => self.stack.push(result),
-                    Err(_) => {
-                        // Undo, push back onto stack.
-                        self.stack.push(b);
-                        self.stack.push(a);
-                        return Err(RPNError::NegativePow);
-                    }
-                }
+                let a = self
+                    .stack
+                    .get(stack_size - 2)
+                    .expect("failed to peek at stack");
+                let b = self
+                    .stack
+                    .get(stack_size - 1)
+                    .expect("failed to peek at stack");
+                let result = a.pow(*b)?;
+                let _ = self.stack.pop();
+                let _ = self.stack.pop();
+                self.stack.push(result);
             }
             Op::Absolute => {
                 self.require_stack(1)?;
                 let a = self.stack.pop().expect("failed to pop item from stack");
                 self.stack.push(a.abs());
+            }
+            Op::Modulo => {
+                self.require_stack(2)?;
+                let a = self
+                    .stack
+                    .get(stack_size - 2)
+                    .expect("failed to peek at stack");
+                let b = self
+                    .stack
+                    .get(stack_size - 1)
+                    .expect("failed to peek at stack");
+                let result = a.modulo(*b)?;
+                let _ = self.stack.pop();
+                let _ = self.stack.pop();
+                self.stack.push(result);
+            }
+            Op::Remainder => {
+                self.require_stack(2)?;
+                let a = self
+                    .stack
+                    .get(stack_size - 2)
+                    .expect("failed to peek at stack");
+                let b = self
+                    .stack
+                    .get(stack_size - 1)
+                    .expect("failed to peek at stack");
+                let result = a.rem(*b)?;
+                let _ = self.stack.pop();
+                let _ = self.stack.pop();
+                self.stack.push(result);
             }
             _ => todo!(),
         };
@@ -147,6 +181,8 @@ impl State {
 pub enum RPNError {
     /// An operation required a certain stack size, which was not met.
     RequiresStack(usize),
+    /// Any of the dividing operations received a zero divisor.
+    DivisionByZero,
     /// Pow received a negative exponent.
     NegativePow,
 }
@@ -160,6 +196,7 @@ impl Debug for RPNError {
                 write!(f, "requires at least {size} item on the stack")
             }
             Self::RequiresStack(size) => write!(f, "requires at least {size} items on the stack"),
+            Self::DivisionByZero => write!(f, "division by zero"),
             Self::NegativePow => write!(f, "negative exponent"),
         }
     }
@@ -178,12 +215,21 @@ pub enum Num {
 }
 
 impl Num {
+    /// True if the wrapped value is zero.
+    fn is_zero(&self) -> bool {
+        match self {
+            Self::Int(0) => true,
+            Self::Float(f) => *f == 0.0,
+            _ => false,
+        }
+    }
+
     /// Unwrapping power, works for both i128 and f64, as well as
     /// mixes of both. Refuses negative exponents.
-    fn pow(self, rhs: Self) -> Result<Self, &'static str> {
+    fn pow(self, rhs: Self) -> Result<Self, RPNError> {
         match (self, rhs) {
-            (_, Self::Int(x)) if x < 0 => Err("negative exponent"),
-            (_, Self::Float(x)) if x < 0.0 => Err("negative exponent"),
+            (_, Self::Int(x)) if x < 0 => Err(RPNError::NegativePow),
+            (_, Self::Float(x)) if x < 0.0 => Err(RPNError::NegativePow),
             (Self::Int(a), Self::Int(b)) => Ok(Self::Int(a.pow(b as u32))),
             (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a.powf(b as f64))),
             (Self::Int(a), Self::Float(b)) => Ok(Self::Float((a as f64).powf(b))),
@@ -191,11 +237,35 @@ impl Num {
         }
     }
 
-    /// Unwrapping abs.
+    /// Returns the absolute value.
     fn abs(self) -> Self {
         match self {
             Self::Int(n) => Self::Int(n.abs()),
             Self::Float(n) => Self::Float(n.abs()),
+        }
+    }
+
+    /// Returns the modulo.
+    fn modulo(self, rhs: Self) -> Result<Self, RPNError> {
+        match (self, rhs) {
+            (_, Self::Int(0)) => Err(RPNError::DivisionByZero),
+            (_, Self::Float(b)) if b == 0.0 => Err(RPNError::DivisionByZero),
+            (Self::Int(a), Self::Int(b)) => Ok(Self::Int(a.div_euclid(b))),
+            (Self::Int(a), Self::Float(b)) => Ok(Self::Float((a as f64).div_euclid(b))),
+            (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a.div_euclid(b as f64))),
+            (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a.div_euclid(b))),
+        }
+    }
+
+    /// Returns the remainder.
+    fn rem(self, rhs: Self) -> Result<Self, RPNError> {
+        match (self, rhs) {
+            (_, Self::Int(0)) => Err(RPNError::DivisionByZero),
+            (_, Self::Float(b)) if b == 0.0 => Err(RPNError::DivisionByZero),
+            (Self::Int(a), Self::Int(b)) => Ok(Self::Int(a.rem_euclid(b))),
+            (Self::Int(a), Self::Float(b)) => Ok(Self::Float((a as f64).rem_euclid(b))),
+            (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a.rem_euclid(b as f64))),
+            (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a.rem_euclid(b))),
         }
     }
 }
@@ -534,6 +604,12 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "division by zero")]
+    fn divide_errors_zero_divisor() {
+        run_and_compare_stack(&[Op::Push(42.into()), Op::Push(0.into()), Op::Divide], [42]);
+    }
+
+    #[test]
     fn negate_for_ints_works() {
         run_and_compare_stack(&[Op::Push(42.into()), Op::Negate], [-42]);
     }
@@ -620,5 +696,146 @@ mod tests {
     #[test]
     fn absolute_works_for_floats() {
         run_and_compare_stack(&[Op::Push((-42.5).into()), Op::Absolute], [42.5]);
+    }
+
+    #[test]
+    fn mod_works() {
+        run_and_compare_stack(&[Op::Push(10.into()), Op::Push(3.into()), Op::Modulo], [3]);
+    }
+
+    #[test]
+    fn mod_works_with_float_divisor() {
+        run_and_compare_stack(
+            &[Op::Push(10.into()), Op::Push(3.0.into()), Op::Modulo],
+            [3.0],
+        );
+    }
+
+    #[test]
+    fn mod_works_with_float_dividend() {
+        run_and_compare_stack(
+            &[Op::Push(10.0.into()), Op::Push(3.into()), Op::Modulo],
+            [3.0],
+        );
+    }
+
+    #[test]
+    fn mod_works_with_float_both() {
+        run_and_compare_stack(
+            &[Op::Push(10.0.into()), Op::Push(3.0.into()), Op::Modulo],
+            [3.0],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
+    fn mod_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::Modulo], [42]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
+    fn mod_errors_with_stack_of_one() {
+        run_and_compare_stack(&[Op::Push(42.into()), Op::Modulo], [42]);
+    }
+
+    #[test]
+    #[should_panic(expected = "division by zero")]
+    fn mod_refuses_zero_divisor() {
+        run_and_compare_stack(
+            &[Op::Push(2.into()), Op::Push((0).into()), Op::Modulo],
+            [16.0],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "division by zero")]
+    fn mod_refuses_negative_float_divisor() {
+        run_and_compare_stack(
+            &[Op::Push(2.into()), Op::Push((0.0).into()), Op::Modulo],
+            [16.0],
+        );
+    }
+
+    #[test]
+    fn mod_keeps_stack_intact_on_error() {
+        let ops = &[Op::Push(2.into()), Op::Push((0).into()), Op::Modulo];
+        let mut state = State::default();
+        match state.run(ops) {
+            Err(_) => assert_eq!(state.stack, make_stack([2, 0])),
+            _ => panic!("ops ran successfully"),
+        }
+    }
+
+    #[test]
+    fn rem_works() {
+        run_and_compare_stack(
+            &[Op::Push(10.into()), Op::Push(3.into()), Op::Remainder],
+            [1],
+        );
+    }
+
+    #[test]
+    fn rem_works_with_float_divisor() {
+        run_and_compare_stack(
+            &[Op::Push(10.into()), Op::Push(3.0.into()), Op::Remainder],
+            [1.0],
+        );
+    }
+
+    #[test]
+    fn rem_works_with_float_dividend() {
+        run_and_compare_stack(
+            &[Op::Push(10.0.into()), Op::Push(3.into()), Op::Remainder],
+            [1.0],
+        );
+    }
+
+    #[test]
+    fn rem_works_with_float_both() {
+        run_and_compare_stack(
+            &[Op::Push(10.0.into()), Op::Push(3.0.into()), Op::Remainder],
+            [1.0],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
+    fn rem_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::Remainder], [42]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
+    fn rem_errors_with_stack_of_one() {
+        run_and_compare_stack(&[Op::Push(42.into()), Op::Remainder], [42]);
+    }
+
+    #[test]
+    #[should_panic(expected = "division by zero")]
+    fn rem_refuses_zero_divisor() {
+        run_and_compare_stack(
+            &[Op::Push(2.into()), Op::Push((0).into()), Op::Remainder],
+            [16.0],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "division by zero")]
+    fn rem_refuses_negative_float_divisor() {
+        run_and_compare_stack(
+            &[Op::Push(2.into()), Op::Push((0.0).into()), Op::Remainder],
+            [16.0],
+        );
+    }
+
+    #[test]
+    fn rem_keeps_stack_intact_on_error() {
+        let ops = &[Op::Push(2.into()), Op::Push((0).into()), Op::Remainder];
+        let mut state = State::default();
+        match state.run(ops) {
+            Err(_) => assert_eq!(state.stack, make_stack([2, 0])),
+            _ => panic!("ops ran successfully"),
+        }
     }
 }
