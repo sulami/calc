@@ -233,8 +233,8 @@ fn format_history_event(state: &rpn::State, op: &Op) -> String {
             state.stack.get(stack_size - 2).unwrap(),
             state.stack.get(stack_size - 1).unwrap()
         ),
-        Op::Drop => format!("<- {}", state.stack.first().unwrap()),
-        Op::Negate => format!("(-) {}", state.stack.get(stack_size - 1).unwrap()),
+        Op::Drop => format!("<- {}", state.stack.last().unwrap()),
+        Op::Negate => format!("(-) {}", state.stack.last().unwrap()),
         Op::Clear => "- clear -".to_string(),
         Op::Add => format!(
             "{} + {}",
