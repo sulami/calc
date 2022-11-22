@@ -147,14 +147,8 @@ fn insert_input(mut state: State) -> State {
 fn try_op(mut state: State, op: Op) -> State {
     let current_state = state.calc_state.clone();
     match state.calc_state.execute(&op) {
-        Ok(_) => {
-            state.history.push((op, current_state));
-            // state.calc_state = new_state;
-        }
-        Err(error) => {
-            // state.calc_state = new_state;
-            state.message = Some(format!("{error}").clone());
-        }
+        Ok(()) => state.history.push((op, current_state)),
+        Err(error) => state.message = Some(format!("{error}").clone()),
     }
     state
 }
@@ -181,12 +175,17 @@ fn draw_ui(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
         .constraints(
             [
                 Constraint::Percentage(25),
-                Constraint::Percentage(25),
+                Constraint::Length(27),
                 Constraint::Percentage(50),
             ]
             .as_ref(),
         )
         .split(root[0]);
+
+    let centre_stack = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+        .split(top_section[1]);
 
     let stack_box = List::new(
         state
@@ -203,7 +202,27 @@ fn draw_ui(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
 
     let register_box = List::new([ListItem::new("Coming soon")])
         .block(Block::default().title("Registers").borders(Borders::ALL));
-    f.render_widget(register_box, top_section[1]);
+    f.render_widget(register_box, centre_stack[0]);
+
+    let stack_top = if let Some(rpn::Num::Int(n)) = state.calc_state.stack_last() {
+        *n
+    } else {
+        0
+    };
+    let stack_size = state.calc_state.stack_size();
+
+    let info_box = Paragraph::new(format!(
+        "Status: Fully operational
+Input mode:           Dec
+Stack size: {stack_size:>13}
+─────────────────────────
+Bin: {stack_top:>20b}
+Oct: {stack_top:>20o}
+Dec: {stack_top:>20}
+Hex: {stack_top:>20x}"
+    ))
+    .block(Block::default().title("Info").borders(Borders::ALL));
+    f.render_widget(info_box, centre_stack[1]);
 
     let history_box = List::new(
         state
