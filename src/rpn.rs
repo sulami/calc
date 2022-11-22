@@ -13,110 +13,138 @@
 
 #![allow(dead_code)]
 
+use std::fmt::{self, Debug, Display};
+
 #[derive(Clone, Debug, Default)]
 pub struct State {
     pub stack: Vec<Num>,
 }
 
 impl State {
+    /// Returns an error if the stack size is less than required.
+    fn require_stack(&self, size: usize) -> Result<(), RPNError> {
+        if self.stack.len() >= size {
+            Ok(())
+        } else {
+            Err(RPNError::RequiresStack(size))
+        }
+    }
+
     /// Executes a single operation on state, returning the new state. If
     /// the operation fails, returns a tuple of the old state and an error
     /// message.
-    pub fn execute(mut self, op: &Op) -> Result<Self, (Self, &'static str)> {
+    pub fn execute(&mut self, op: &Op) -> Result<(), RPNError> {
         let stack_size = self.stack.len();
+
         match op {
             Op::Push(n) => self.stack.push(*n),
-            Op::Drop if stack_size < 1 => {
-                return Err((self, "stack is empty"));
-            }
             Op::Drop => {
+                self.require_stack(1)?;
                 let _ = self.stack.pop();
             }
-            Op::Swap if stack_size < 2 => {
-                return Err((self, "requires at least two items on stack"));
+            Op::Swap => {
+                self.require_stack(2)?;
+                self.stack.swap(stack_size - 1, stack_size - 2)
             }
-            Op::Swap => self.stack.swap(stack_size - 1, stack_size - 2),
             Op::Rotate => {
                 if let Some(item) = self.stack.pop() {
                     self.stack.insert(0, item);
                 }
             }
             Op::Clear => self.stack.clear(),
-            Op::Add if stack_size < 2 => {
-                return Err((self, "requires at least two items on stack"));
-            }
             Op::Add => {
+                self.require_stack(2)?;
                 let a = self.stack.pop().expect("failed to pop item from stack");
                 let b = self.stack.pop().expect("failed to pop item from stack");
                 self.stack.push(b + a);
             }
-            Op::Subtract if stack_size < 2 => {
-                return Err((self, "requires at least two items on stack"));
-            }
             Op::Subtract => {
+                self.require_stack(2)?;
                 let a = self.stack.pop().expect("failed to pop item from stack");
                 let b = self.stack.pop().expect("failed to pop item from stack");
                 self.stack.push(b - a);
             }
-            Op::Multiply if stack_size < 2 => {
-                return Err((self, "requires at least two items on stack"));
-            }
             Op::Multiply => {
+                self.require_stack(2)?;
                 let a = self.stack.pop().expect("failed to pop item from stack");
                 let b = self.stack.pop().expect("failed to pop item from stack");
                 self.stack.push(b * a);
             }
-            Op::Divide if stack_size < 2 => {
-                return Err((self, "requires at least two items on stack"));
-            }
             Op::Divide => {
+                self.require_stack(2)?;
                 let a = self.stack.pop().expect("failed to pop item from stack");
                 let b = self.stack.pop().expect("failed to pop item from stack");
                 self.stack.push(b / a);
             }
-            Op::Negate if stack_size < 1 => {
-                return Err((self, "stack is empty"));
-            }
             Op::Negate => {
+                self.require_stack(1)?;
                 let a = self.stack.pop().expect("failed to pop item from stack");
                 self.stack.push(-a);
             }
-            Op::Pow if stack_size < 2 => {
-                return Err((self, "requires at least two items on stack"));
-            }
             Op::Pow => {
+                self.require_stack(2)?;
                 let a = self.stack.pop().expect("failed to pop item from stack");
                 let b = self.stack.pop().expect("failed to pop item from stack");
                 match b.pow(a) {
                     Ok(result) => self.stack.push(result),
-                    Err(msg) => {
+                    Err(_) => {
                         // Undo, push back onto stack.
                         self.stack.push(b);
                         self.stack.push(a);
-                        return Err((self, msg));
+                        return Err(RPNError::NegativePow);
                     }
                 }
             }
-            Op::Absolute if stack_size < 1 => {
-                return Err((self, "stack is empty"));
-            }
             Op::Absolute => {
+                self.require_stack(1)?;
                 let a = self.stack.pop().expect("failed to pop item from stack");
                 self.stack.push(a.abs());
             }
             _ => todo!(),
         };
-        Ok(self)
+        Ok(())
     }
 
     /// Executes a chain of instructions on state. Halts at the first
     /// error and returns the state at that point as well as an error
     /// message.
-    pub fn run<'a, I>(self, ops: I) -> Result<Self, (Self, &'static str)>
+    pub fn run<'a, I>(&mut self, ops: I) -> Result<(), RPNError>
     where
         I: IntoIterator<Item = &'a Op>,
     {
-        ops.into_iter().try_fold(self, Self::execute)
+        // ops.into_iter().try_fold(self, Self::execute)
+        for op in ops {
+            self.execute(op)?
+        }
+        Ok(())
+    }
+}
+
+/// The errors that can occur when trying to process an Op.
+pub enum RPNError {
+    /// An operation required a certain stack size, which was not met.
+    RequiresStack(usize),
+    /// Pow received a negative exponent.
+    NegativePow,
+}
+
+impl std::error::Error for RPNError {}
+
+impl Debug for RPNError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::RequiresStack(size) if *size == 1 => {
+                write!(f, "requires at least {size} item on the stack")
+            }
+            Self::RequiresStack(size) => write!(f, "requires at least {size} items on the stack"),
+            Self::NegativePow => write!(f, "negative exponent"),
+        }
+    }
+}
+
+impl Display for RPNError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{self:?}")
     }
 }
 
@@ -149,8 +177,8 @@ impl Num {
     }
 }
 
-impl std::fmt::Display for Num {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl Display for Num {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Int(n) => write!(f, "{n}"),
             Self::Float(n) => write!(f, "{n}"),
@@ -289,7 +317,8 @@ mod tests {
         J: IntoIterator<Item = N>,
         N: Into<Num>,
     {
-        let state = State::default().run(ops).expect("Failed to run ops");
+        let mut state = State::default();
+        state.run(ops).expect("Failed to run ops");
         assert_eq!(state.stack, make_stack(expected));
     }
 
@@ -309,7 +338,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "stack is empty")]
+    #[should_panic(expected = "requires at least 1 item on the stack")]
     fn drop_errors_on_empty_stack() {
         run_and_compare_stack(&[Op::Drop], [42]);
     }
@@ -328,13 +357,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "requires at least two items on stack")]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
     fn swap_errors_on_empty_stack() {
         run_and_compare_stack(&[Op::Swap], [42]);
     }
 
     #[test]
-    #[should_panic(expected = "requires at least two items on stack")]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
     fn swap_errors_with_stack_of_one() {
         run_and_compare_stack(&[Op::Push(42.into()), Op::Swap], [42]);
     }
@@ -386,13 +415,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "requires at least two items on stack")]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
     fn add_errors_on_empty_stack() {
         run_and_compare_stack(&[Op::Add], [42]);
     }
 
     #[test]
-    #[should_panic(expected = "requires at least two items on stack")]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
     fn add_errors_with_stack_of_one() {
         run_and_compare_stack(&[Op::Push(42.into()), Op::Add], [42]);
     }
@@ -414,13 +443,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "requires at least two items on stack")]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
     fn subtract_errors_on_empty_stack() {
         run_and_compare_stack(&[Op::Subtract], [42]);
     }
 
     #[test]
-    #[should_panic(expected = "requires at least two items on stack")]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
     fn subtract_errors_with_stack_of_one() {
         run_and_compare_stack(&[Op::Push(42.into()), Op::Subtract], [42]);
     }
@@ -442,13 +471,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "requires at least two items on stack")]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
     fn multiply_errors_on_empty_stack() {
         run_and_compare_stack(&[Op::Multiply], [42]);
     }
 
     #[test]
-    #[should_panic(expected = "requires at least two items on stack")]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
     fn multiply_errors_with_stack_of_one() {
         run_and_compare_stack(&[Op::Push(42.into()), Op::Multiply], [42]);
     }
@@ -470,13 +499,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "requires at least two items on stack")]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
     fn divide_errors_on_empty_stack() {
         run_and_compare_stack(&[Op::Divide], [42]);
     }
 
     #[test]
-    #[should_panic(expected = "requires at least two items on stack")]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
     fn divide_errors_with_stack_of_one() {
         run_and_compare_stack(&[Op::Push(42.into()), Op::Divide], [42]);
     }
@@ -492,7 +521,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "stack is empty")]
+    #[should_panic(expected = "requires at least 1 item on the stack")]
     fn negate_errors_on_empty_stack() {
         run_and_compare_stack(&[Op::Negate], [42]);
     }
@@ -521,13 +550,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "requires at least two items on stack")]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
     fn pow_errors_on_empty_stack() {
         run_and_compare_stack(&[Op::Pow], [42]);
     }
 
     #[test]
-    #[should_panic(expected = "requires at least two items on stack")]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
     fn pow_errors_with_stack_of_one() {
         run_and_compare_stack(&[Op::Push(42.into()), Op::Pow], [42]);
     }
@@ -553,8 +582,9 @@ mod tests {
     #[test]
     fn pow_keeps_stack_intact_on_error() {
         let ops = &[Op::Push(2.into()), Op::Push((-4).into()), Op::Pow];
-        match State::default().run(ops) {
-            Err((state, _)) => assert_eq!(state.stack, make_stack([2, -4])),
+        let mut state = State::default();
+        match state.run(ops) {
+            Err(_) => assert_eq!(state.stack, make_stack([2, -4])),
             _ => panic!("ops ran successfully"),
         }
     }

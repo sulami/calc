@@ -22,7 +22,7 @@ struct State {
     calc_state: rpn::State,
     history: Vec<(Op, rpn::State)>,
     input: String,
-    message: Option<&'static str>,
+    message: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -133,7 +133,7 @@ fn insert_input(mut state: State) -> State {
             .input
             .parse::<i128>()
             .map(rpn::Num::from)
-            .or(state.input.parse::<f64>().map(rpn::Num::from))
+            .or_else(|_| state.input.parse::<f64>().map(rpn::Num::from))
             .expect("Invalid number");
         let op = Op::Push(num);
         state = try_op(state, op);
@@ -147,13 +147,13 @@ fn insert_input(mut state: State) -> State {
 fn try_op(mut state: State, op: Op) -> State {
     let current_state = state.calc_state.clone();
     match state.calc_state.execute(&op) {
-        Ok(new_state) => {
+        Ok(_) => {
             state.history.push((op, current_state));
-            state.calc_state = new_state;
+            // state.calc_state = new_state;
         }
-        Err((new_state, message)) => {
-            state.calc_state = new_state;
-            state.message = Some(message);
+        Err(error) => {
+            // state.calc_state = new_state;
+            state.message = Some(format!("{error}").clone());
         }
     }
     state
@@ -217,7 +217,8 @@ fn draw_ui(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
     .block(Block::default().title("History").borders(Borders::ALL));
     f.render_widget(history_box, top_section[2]);
 
-    let input_box = Paragraph::new(state.message.unwrap_or(&state.input))
+    let message = state.message.clone();
+    let input_box = Paragraph::new(message.unwrap_or(state.input.clone()))
         .block(Block::default().title("Input").borders(Borders::ALL))
         .wrap(Wrap { trim: false });
     f.render_widget(input_box, root[1]);
