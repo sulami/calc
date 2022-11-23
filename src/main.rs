@@ -66,6 +66,7 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                     state = insert_input(state);
                     state = try_op(state, Op::Floor);
                 }
+                'E' => state = try_op(state, Op::Push(std::f64::consts::E.into())),
                 'k' => state = try_op(state, Op::Drop),
                 'L' => {
                     state = insert_input(state);
@@ -75,6 +76,7 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                     state = insert_input(state);
                     state = try_op(state, Op::Negate);
                 }
+                'P' => state = try_op(state, Op::Push(std::f64::consts::PI.into())),
                 'r' => state = try_op(state, Op::Rotate),
                 'R' => {
                     state = insert_input(state);
@@ -130,6 +132,7 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                     state = insert_input(state);
                     state = try_op(state, Op::Invert);
                 }
+                '#' => state = try_op(state, Op::Push(rand::random::<f64>().into())),
                 'Q' => return Ok(()),
                 _ => (),
             },
