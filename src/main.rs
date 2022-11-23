@@ -58,8 +58,19 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                     }
                 }
                 'A' => state = try_op(state, Op::Absolute),
-                'C' => state = try_op(state, Op::Clear),
+                'C' => {
+                    state = insert_input(state);
+                    state = try_op(state, Op::Cosine);
+                }
+                'D' => {
+                    state = insert_input(state);
+                    state = try_op(state, Op::Floor);
+                }
                 'k' => state = try_op(state, Op::Drop),
+                'L' => {
+                    state = insert_input(state);
+                    state = try_op(state, Op::NaturalLogarithm);
+                }
                 'n' => {
                     state = insert_input(state);
                     state = try_op(state, Op::Negate);
@@ -70,7 +81,23 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                     state = try_op(state, Op::Remainder);
                 }
                 's' => state = try_op(state, Op::Swap),
+                'S' => {
+                    state = insert_input(state);
+                    state = try_op(state, Op::Sine);
+                }
+                'T' => {
+                    state = insert_input(state);
+                    state = try_op(state, Op::Tangent);
+                }
                 'u' => state = undo(state),
+                'U' => {
+                    state = insert_input(state);
+                    state = try_op(state, Op::Ceiling);
+                }
+                'V' => {
+                    state = insert_input(state);
+                    state = try_op(state, Op::SquareRoot);
+                }
                 '+' => {
                     state = insert_input(state);
                     state = try_op(state, Op::Add);
@@ -95,6 +122,14 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                     state = insert_input(state);
                     state = try_op(state, Op::Modulo);
                 }
+                '~' => {
+                    state = insert_input(state);
+                    state = try_op(state, Op::Round);
+                }
+                '\\' => {
+                    state = insert_input(state);
+                    state = try_op(state, Op::Invert);
+                }
                 'Q' => return Ok(()),
                 _ => (),
             },
@@ -111,6 +146,7 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                         let _ = state.input.pop();
                     }
                 }
+                KeyCode::Delete => state = try_op(state, Op::Clear),
                 _ => (),
             },
             _ => (),
@@ -300,6 +336,15 @@ fn format_history_event(state: &rpn::State, op: &Op) -> String {
             state.stack_get(stack_size - 2).unwrap(),
             state.stack_get(stack_size - 1).unwrap()
         ),
+        Op::Round => format!("≈ {}", state.stack_last().unwrap()),
+        Op::Floor => format!("↓ {}", state.stack_last().unwrap()),
+        Op::Ceiling => format!("↑ {}", state.stack_last().unwrap()),
+        Op::Sine => format!("sin {}", state.stack_last().unwrap()),
+        Op::Cosine => format!("cos {}", state.stack_last().unwrap()),
+        Op::Tangent => format!("tan {}", state.stack_last().unwrap()),
+        Op::SquareRoot => format!("√ {}", state.stack_last().unwrap()),
+        Op::NaturalLogarithm => format!("ln {}", state.stack_last().unwrap()),
+        Op::Invert => format!("1 / {}", state.stack_last().unwrap()),
         _ => format!("{state:?} -> {op:?}"),
     }
 }

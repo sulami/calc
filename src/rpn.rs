@@ -157,6 +157,51 @@ impl State {
                 let _ = self.stack.pop();
                 self.stack.push(result);
             }
+            Op::Round => {
+                self.require_stack(1)?;
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(a.round());
+            }
+            Op::Floor => {
+                self.require_stack(1)?;
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(a.floor());
+            }
+            Op::Ceiling => {
+                self.require_stack(1)?;
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(a.ceiling());
+            }
+            Op::Sine => {
+                self.require_stack(1)?;
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(a.sine());
+            }
+            Op::Cosine => {
+                self.require_stack(1)?;
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(a.cosine());
+            }
+            Op::Tangent => {
+                self.require_stack(1)?;
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(a.tangent());
+            }
+            Op::SquareRoot => {
+                self.require_stack(1)?;
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(a.square_root());
+            }
+            Op::NaturalLogarithm => {
+                self.require_stack(1)?;
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(a.ln());
+            }
+            Op::Invert => {
+                self.require_stack(1)?;
+                let a = self.stack.pop().expect("failed to pop item from stack");
+                self.stack.push(a.invert());
+            }
             _ => todo!(),
         };
         Ok(())
@@ -169,7 +214,6 @@ impl State {
     where
         I: IntoIterator<Item = &'a Op>,
     {
-        // ops.into_iter().try_fold(self, Self::execute)
         for op in ops {
             self.execute(op)?
         }
@@ -224,6 +268,83 @@ impl Num {
         }
     }
 
+    /// Returns 1/n.
+    fn invert(self) -> Self {
+        Self::Int(1) / self
+    }
+
+    /// Returns the absolute value.
+    fn abs(self) -> Self {
+        match self {
+            Self::Int(n) => Self::Int(n.abs()),
+            Self::Float(n) => Self::Float(n.abs()),
+        }
+    }
+
+    /// Rounds to the nearest integer.
+    fn round(self) -> Self {
+        match self {
+            Self::Int(_) => self,
+            Self::Float(n) => Self::Int(n.round() as i128),
+        }
+    }
+
+    /// Rounds to the nearest smaller integer.
+    fn floor(self) -> Self {
+        match self {
+            Self::Int(_) => self,
+            Self::Float(n) => Self::Int(n.floor() as i128),
+        }
+    }
+
+    /// Rounds to the nearest larger integer.
+    fn ceiling(self) -> Self {
+        match self {
+            Self::Int(_) => self,
+            Self::Float(n) => Self::Int(n.ceil() as i128),
+        }
+    }
+
+    /// Returns the square root.
+    fn square_root(self) -> Self {
+        match self {
+            Self::Int(n) => Self::Float((n as f64).sqrt()),
+            Self::Float(n) => Self::Float(n.sqrt()),
+        }
+    }
+
+    /// Returns sin(n).
+    fn sine(self) -> Self {
+        match self {
+            Self::Int(n) => Self::Float((n as f64).sin()),
+            Self::Float(n) => Self::Float(n.sin()),
+        }
+    }
+
+    /// Returns cos(n).
+    fn cosine(self) -> Self {
+        match self {
+            Self::Int(n) => Self::Float((n as f64).cos()),
+            Self::Float(n) => Self::Float(n.cos()),
+        }
+    }
+
+    /// Returns tan(n).
+    fn tangent(self) -> Self {
+        match self {
+            Self::Int(n) => Self::Float((n as f64).tan()),
+            Self::Float(n) => Self::Float(n.tan()),
+        }
+    }
+
+    /// Returns the natural logarithm.
+    fn ln(self) -> Self {
+        match self {
+            Self::Int(n) => Self::Float((n as f64).ln()),
+            Self::Float(n) => Self::Float(n.ln()),
+        }
+    }
+
     /// Unwrapping power, works for both i128 and f64, as well as
     /// mixes of both. Refuses negative exponents.
     fn pow(self, rhs: Self) -> Result<Self, RPNError> {
@@ -234,14 +355,6 @@ impl Num {
             (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a.powf(b as f64))),
             (Self::Int(a), Self::Float(b)) => Ok(Self::Float((a as f64).powf(b))),
             (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a.powf(b))),
-        }
-    }
-
-    /// Returns the absolute value.
-    fn abs(self) -> Self {
-        match self {
-            Self::Int(n) => Self::Int(n.abs()),
-            Self::Float(n) => Self::Float(n.abs()),
         }
     }
 
@@ -367,26 +480,30 @@ pub enum Op {
     Subtract,
     Divide,
     Multiply,
-    Negate,
-    Absolute,
     Modulo,
     Remainder,
-    Invert,
     Pow,
+    Logrithm,
+    // Unary operators
+    Negate,
+    Absolute,
+    Invert,
     SquareRoot,
     Sine,
     Cosine,
     Tangent,
+    Floor,
+    Ceiling,
+    Round,
+    NaturalLogarithm,
     // Bitwise operations
     BitwiseAnd,
     BitwiseOr,
     BitwiseXor,
     BitwiseNand,
-    BitwiseNOT,
+    BitwiseNot,
     ShiftLeft,
     ShiftRight,
-    // Misc
-    Rand,
 }
 
 #[cfg(test)]
@@ -837,5 +954,104 @@ mod tests {
             Err(_) => assert_eq!(state.stack, make_stack([2, 0])),
             _ => panic!("ops ran successfully"),
         }
+    }
+
+    #[test]
+    fn round_works() {
+        run_and_compare_stack(&[Op::Push(2.5.into()), Op::Round], [3]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 1 item on the stack")]
+    fn round_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::Round], [3]);
+    }
+
+    #[test]
+    fn floor_works() {
+        run_and_compare_stack(&[Op::Push(2.5.into()), Op::Floor], [2]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 1 item on the stack")]
+    fn floor_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::Floor], [3]);
+    }
+
+    #[test]
+    fn ceiling_works() {
+        run_and_compare_stack(&[Op::Push(2.5.into()), Op::Ceiling], [3]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 1 item on the stack")]
+    fn ceiling_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::Ceiling], [3]);
+    }
+
+    #[test]
+    fn sine_works() {
+        run_and_compare_stack(&[Op::Push(0.into()), Op::Sine], [0.0]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 1 item on the stack")]
+    fn sine_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::Sine], [3]);
+    }
+
+    #[test]
+    fn cosine_works() {
+        run_and_compare_stack(&[Op::Push(0.into()), Op::Cosine], [1.0]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 1 item on the stack")]
+    fn cosine_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::Cosine], [3]);
+    }
+
+    #[test]
+    fn tangent_works() {
+        run_and_compare_stack(&[Op::Push(0.into()), Op::Tangent], [0.0]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 1 item on the stack")]
+    fn tangent_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::Tangent], [3]);
+    }
+
+    #[test]
+    fn square_root_works() {
+        run_and_compare_stack(&[Op::Push(9.into()), Op::SquareRoot], [3.0]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 1 item on the stack")]
+    fn square_root_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::SquareRoot], [3]);
+    }
+
+    #[test]
+    fn natural_logarithm_works() {
+        run_and_compare_stack(&[Op::Push(1.into()), Op::NaturalLogarithm], [0.0]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 1 item on the stack")]
+    fn natural_logarithm_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::NaturalLogarithm], [3]);
+    }
+
+    #[test]
+    fn inivert_works() {
+        run_and_compare_stack(&[Op::Push(2.into()), Op::Invert], [0.5]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 1 item on the stack")]
+    fn invert_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::Invert], [3]);
     }
 }
