@@ -156,7 +156,7 @@ fn try_op(mut state: State, op: Op) -> State {
     let current_state = state.calc_state.clone();
     match state.calc_state.execute(&op) {
         Ok(()) => state.history.push((op, current_state)),
-        Err(error) => state.message = Some(format!("{error}").clone()),
+        Err(error) => state.message = Some(format!("{error}")),
     }
     state
 }
