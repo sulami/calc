@@ -21,8 +21,21 @@ mod rpn;
 struct State {
     calc_state: rpn::State,
     history: Vec<(Op, rpn::State)>,
+    mode: InputMode,
     input: String,
     message: Option<String>,
+}
+
+enum InputMode {
+    Normal,
+    StoreRegister,
+    RecallRegister,
+}
+
+impl Default for InputMode {
+    fn default() -> Self {
+        Self::Normal
+    }
 }
 
 fn main() -> Result<()> {
@@ -46,119 +59,165 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
     terminal.draw(|f| draw_ui(&state, f))?;
 
     loop {
-        match read()? {
-            Event::Key(KeyEvent {
-                code: KeyCode::Char(c),
-                ..
-            }) => match c {
-                '0'..='9' => state.input.push(c),
-                '.' => {
-                    if !state.input.contains('.') {
-                        state.input.push(c)
-                    }
+        match state.mode {
+            InputMode::Normal => {
+                match read()? {
+                    Event::Key(KeyEvent {
+                        code: KeyCode::Char(c),
+                        ..
+                    }) => match c {
+                        '0'..='9' => state.input.push(c),
+                        '.' => {
+                            if !state.input.contains('.') {
+                                state.input.push(c)
+                            }
+                        }
+                        'A' => state = try_op(state, Op::Absolute),
+                        'C' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::Cosine);
+                        }
+                        'D' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::Floor);
+                        }
+                        'E' => state = try_op(state, Op::Push(std::f64::consts::E.into())),
+                        'k' => state = try_op(state, Op::Drop),
+                        'L' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::NaturalLogarithm);
+                        }
+                        'n' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::Negate);
+                        }
+                        'P' => state = try_op(state, Op::Push(std::f64::consts::PI.into())),
+                        'r' => state = try_op(state, Op::Rotate),
+                        'R' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::Remainder);
+                        }
+                        's' => state = try_op(state, Op::Swap),
+                        'S' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::Sine);
+                        }
+                        'T' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::Tangent);
+                        }
+                        'u' => state = undo(state),
+                        'U' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::Ceiling);
+                        }
+                        'V' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::SquareRoot);
+                        }
+                        'x' => {
+                            state = insert_input(state);
+                            state.message = Some("enter register name".to_string());
+                            state.mode = InputMode::StoreRegister;
+                        }
+                        'y' => {
+                            state = insert_input(state);
+                            state.message = Some("enter register name".to_string());
+                            state.mode = InputMode::RecallRegister;
+                        }
+                        '+' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::Add);
+                        }
+                        '-' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::Subtract);
+                        }
+                        '*' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::Multiply);
+                        }
+                        '/' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::Divide);
+                        }
+                        '^' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::Pow);
+                        }
+                        '%' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::Modulo);
+                        }
+                        '~' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::Round);
+                        }
+                        '\\' => {
+                            state = insert_input(state);
+                            state = try_op(state, Op::Invert);
+                        }
+                        '#' => state = try_op(state, Op::Push(rand::random::<f64>().into())),
+                        'Q' => return Ok(()),
+                        _ => (),
+                    },
+                    Event::Key(KeyEvent { code: key, .. }) => match key {
+                        KeyCode::Enter => {
+                            state = if state.input.is_empty() {
+                                push(state)
+                            } else {
+                                insert_input(state)
+                            }
+                        }
+                        KeyCode::Backspace => {
+                            if !state.input.is_empty() {
+                                let _ = state.input.pop();
+                            }
+                        }
+                        KeyCode::Delete => state = try_op(state, Op::Clear),
+                        _ => (),
+                    },
+                    _ => (),
                 }
-                'A' => state = try_op(state, Op::Absolute),
-                'C' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::Cosine);
-                }
-                'D' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::Floor);
-                }
-                'E' => state = try_op(state, Op::Push(std::f64::consts::E.into())),
-                'k' => state = try_op(state, Op::Drop),
-                'L' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::NaturalLogarithm);
-                }
-                'n' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::Negate);
-                }
-                'P' => state = try_op(state, Op::Push(std::f64::consts::PI.into())),
-                'r' => state = try_op(state, Op::Rotate),
-                'R' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::Remainder);
-                }
-                's' => state = try_op(state, Op::Swap),
-                'S' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::Sine);
-                }
-                'T' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::Tangent);
-                }
-                'u' => state = undo(state),
-                'U' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::Ceiling);
-                }
-                'V' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::SquareRoot);
-                }
-                '+' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::Add);
-                }
-                '-' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::Subtract);
-                }
-                '*' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::Multiply);
-                }
-                '/' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::Divide);
-                }
-                '^' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::Pow);
-                }
-                '%' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::Modulo);
-                }
-                '~' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::Round);
-                }
-                '\\' => {
-                    state = insert_input(state);
-                    state = try_op(state, Op::Invert);
-                }
-                '#' => state = try_op(state, Op::Push(rand::random::<f64>().into())),
-                'Q' => return Ok(()),
-                _ => (),
-            },
-            Event::Key(KeyEvent { code: key, .. }) => match key {
-                KeyCode::Enter => {
-                    state = if state.input.is_empty() {
-                        push(state)
-                    } else {
-                        insert_input(state)
-                    }
-                }
-                KeyCode::Backspace => {
-                    if !state.input.is_empty() {
-                        let _ = state.input.pop();
-                    }
-                }
-                KeyCode::Delete => state = try_op(state, Op::Clear),
-                _ => (),
-            },
-            _ => (),
-        }
 
-        terminal.draw(|f| draw_ui(&state, f))?;
+                terminal.draw(|f| draw_ui(&state, f))?;
 
-        if state.message.is_some() {
-            state.message = None;
+                if state.message.is_some() {
+                    state.message = None;
+                }
+            }
+            InputMode::StoreRegister => {
+                if let Event::Key(KeyEvent {
+                    code: KeyCode::Char(c),
+                    ..
+                }) = read()?
+                {
+                    state.mode = InputMode::Normal;
+                    state.message = None;
+                    match c {
+                        'a'..='z' => state = try_op(state, Op::Store(c)),
+                        'A'..='Z' => state = try_op(state, Op::Store(c)),
+                        _ => state.message = Some("invalid register name".to_string()),
+                    }
+                }
+                terminal.draw(|f| draw_ui(&state, f))?;
+            }
+            InputMode::RecallRegister => {
+                if let Event::Key(KeyEvent {
+                    code: KeyCode::Char(c),
+                    ..
+                }) = read()?
+                {
+                    state.mode = InputMode::Normal;
+                    state.message = None;
+                    match c {
+                        'a'..='z' => state = try_op(state, Op::Recall(c)),
+                        'A'..='Z' => state = try_op(state, Op::Recall(c)),
+                        _ => state.message = Some("invalid register name".to_string()),
+                    }
+                }
+                terminal.draw(|f| draw_ui(&state, f))?;
+            }
         }
     }
 }
@@ -247,8 +306,15 @@ fn draw_ui(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
     .block(Block::default().title("Stack").borders(Borders::ALL));
     f.render_widget(stack_box, top_section[0]);
 
-    let register_box = List::new([ListItem::new("Coming soon")])
-        .block(Block::default().title("Registers").borders(Borders::ALL));
+    let register_box = List::new(
+        state
+            .calc_state
+            .registers_vec()
+            .iter()
+            .map(|(k, v)| ListItem::new(format!("{k}: {v}")))
+            .collect::<Vec<ListItem>>(),
+    )
+    .block(Block::default().title("Registers").borders(Borders::ALL));
     f.render_widget(register_box, centre_stack[0]);
 
     let stack_top = if let Some(rpn::Num::Int(n)) = state.calc_state.stack_last() {
@@ -303,6 +369,8 @@ fn format_history_event(state: &rpn::State, op: &Op) -> String {
         Op::Drop => format!("<- {}", state.stack_last().unwrap()),
         Op::Negate => format!("(-) {}", state.stack_last().unwrap()),
         Op::Clear => "- clear -".to_string(),
+        Op::Store(k) => format!("store {} -> {k}", state.stack_last().unwrap()),
+        Op::Recall(k) => format!("recall {k}"),
         Op::Add => format!(
             "{} + {}",
             state.stack_get(stack_size - 2).unwrap(),

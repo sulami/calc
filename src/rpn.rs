@@ -13,11 +13,13 @@
 
 #![allow(dead_code)]
 
+use std::collections::HashMap;
 use std::fmt::{self, Debug, Display};
 
 #[derive(Clone, Debug, Default)]
 pub struct State {
     stack: Vec<Num>,
+    registers: HashMap<char, Num>,
 }
 
 impl State {
@@ -53,6 +55,11 @@ impl State {
         self.stack.last()
     }
 
+    /// Returns a copy of all registers in a Vec, in arbitary order.
+    pub fn registers_vec(&self) -> Vec<(char, Num)> {
+        self.registers.iter().map(|(k, v)| (*k, *v)).collect()
+    }
+
     /// Executes a single operation on state, returning the new state. If
     /// the operation fails, returns a tuple of the old state and an error
     /// message.
@@ -75,6 +82,15 @@ impl State {
                 }
             }
             Op::Clear => self.stack.clear(),
+            Op::Store(k) => {
+                self.require_stack(1)?;
+                let a = self.stack.last().expect("failed to peek at stack");
+                self.registers.insert(*k, *a);
+            }
+            Op::Recall(k) => match self.registers.get(k) {
+                Some(n) => self.stack.push(*n),
+                None => return Err(RPNError::RegisterNotFound),
+            },
             Op::Add => {
                 self.require_stack(2)?;
                 let b = self.stack.pop().expect("failed to pop item from stack");
@@ -229,6 +245,8 @@ pub enum RPNError {
     DivisionByZero,
     /// Pow received a negative exponent.
     NegativePow,
+    /// Register for recall was not found.
+    RegisterNotFound,
 }
 
 impl std::error::Error for RPNError {}
@@ -242,6 +260,7 @@ impl Debug for RPNError {
             Self::RequiresStack(size) => write!(f, "requires at least {size} items on the stack"),
             Self::DivisionByZero => write!(f, "division by zero"),
             Self::NegativePow => write!(f, "negative exponent"),
+            Self::RegisterNotFound => write!(f, "register not found"),
         }
     }
 }
@@ -475,6 +494,9 @@ pub enum Op {
     Swap,
     Rotate,
     Clear,
+    // Registers
+    Store(char),
+    Recall(char),
     // Artithmetic
     Add,
     Subtract,
@@ -609,6 +631,31 @@ mod tests {
     #[test]
     fn clear_noop_on_empty_stack() {
         run_and_compare_stack(&[Op::Clear], Vec::<Num>::new());
+    }
+
+    #[test]
+    fn store_recall_roundtrip_works() {
+        run_and_compare_stack(
+            &[
+                Op::Push(42.into()),
+                Op::Store('t'),
+                Op::Clear,
+                Op::Recall('t'),
+            ],
+            [42],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 1 item on the stack")]
+    fn store_errors_with_empty_stack() {
+        run_and_compare_stack(&[Op::Store('a')], [42]);
+    }
+
+    #[test]
+    #[should_panic(expected = "register not found")]
+    fn recall_errors_if_register_not_found() {
+        run_and_compare_stack(&[Op::Recall('a')], [42]);
     }
 
     #[test]
