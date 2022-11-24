@@ -143,7 +143,7 @@ fn normal_mode_handler(mut state: State, event: Event) -> Result<State> {
             }
             'E' => state = try_op(state, Op::Push(std::f64::consts::E.into())),
             'h' => state.mode = Mode::Help,
-            'k' => state = try_op(state, Op::Drop),
+            'z' => state = try_op(state, Op::Drop),
             'L' => {
                 state = insert_input(state);
                 state = try_op(state, Op::NaturalLogarithm);
@@ -153,12 +153,12 @@ fn normal_mode_handler(mut state: State, event: Event) -> Result<State> {
                 state = try_op(state, Op::Negate);
             }
             'P' => state = try_op(state, Op::Push(std::f64::consts::PI.into())),
-            'r' => state = try_op(state, Op::Rotate),
+            'q' => state = try_op(state, Op::Rotate),
             'R' => {
                 state = insert_input(state);
                 state = try_op(state, Op::Remainder);
             }
-            's' => state = try_op(state, Op::Swap),
+            'w' => state = try_op(state, Op::Swap),
             'S' => {
                 state = insert_input(state);
                 state = try_op(state, Op::Sine);
@@ -176,12 +176,12 @@ fn normal_mode_handler(mut state: State, event: Event) -> Result<State> {
                 state = insert_input(state);
                 state = try_op(state, Op::SquareRoot);
             }
-            'x' => {
+            'k' => {
                 state = insert_input(state);
                 state.message = Some("enter register name".to_string());
                 state.mode = Mode::StoreRegister;
             }
-            'y' => {
+            'l' => {
                 state = insert_input(state);
                 state.message = Some("enter register name".to_string());
                 state.mode = Mode::RecallRegister;
@@ -380,17 +380,17 @@ fn draw_help_screen(f: &mut Frame<CrosstermBackend<io::Stdout>>) {
     let header = Row::new(vec![Cell::from("Key"), Cell::from("Action")]).bottom_margin(1);
 
     let left_table = Table::new(vec![
-        Row::new(vec!["0-9, a-z", "number input"]),
+        Row::new(vec!["0-9, a-f", "number input"]),
         Row::new(vec!["enter", "push to stack"]),
-        Row::new(vec!["u", "undo"]),
         Row::new(vec!["tab", "switch input mode"]),
+        Row::new(vec!["u", "undo"]),
         Row::new(vec!["h", "toggle help screen"]),
         Row::new(vec!["Q", "quit"]).bottom_margin(1),
-        Row::new(vec!["k", "drop"]),
-        Row::new(vec!["s", "swap"]),
-        Row::new(vec!["R", "rotate stack"]).bottom_margin(1),
-        Row::new(vec!["x <key>", "store to register"]),
-        Row::new(vec!["y <key>", "recall from register"]).bottom_margin(1),
+        Row::new(vec!["z", "drop"]),
+        Row::new(vec!["w", "swap"]),
+        Row::new(vec!["q", "rotate stack"]).bottom_margin(1),
+        Row::new(vec!["k <key>", "store to register"]),
+        Row::new(vec!["l <key>", "recall from register"]).bottom_margin(1),
         Row::new(vec!["E", "push euler's number"]),
         Row::new(vec!["P", "push pi"]),
         Row::new(vec!["#", "push random float 0<f<1"]),
@@ -416,8 +416,8 @@ fn draw_help_screen(f: &mut Frame<CrosstermBackend<io::Stdout>>) {
         Row::new(vec!["C", "cosine"]),
         Row::new(vec!["T", "tangent"]),
         Row::new(vec!["~", "round"]),
-        Row::new(vec!["D", "round down"]),
         Row::new(vec!["U", "round up"]),
+        Row::new(vec!["D", "round down"]),
     ])
     .header(header)
     .column_spacing(1)

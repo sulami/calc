@@ -1,4 +1,4 @@
-//! A reverse Polish notiation calculator core.
+//! A reverse Polish notation calculator core.
 //!
 //! This module is meant to be useful in isolation, and should be
 //! usable to build different calculator frontends or otherwise
