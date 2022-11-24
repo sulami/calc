@@ -457,7 +457,13 @@ fn draw_default_screen(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>
             .stack_vec()
             .iter()
             .rev()
-            .map(|i| ListItem::new(format_num(i, state.base)))
+            .map(|i| {
+                ListItem::new(format_num_ralign(
+                    i,
+                    state.base,
+                    top_section[0].width as usize - 2,
+                ))
+            })
             .collect::<Vec<ListItem>>(),
     )
     .start_corner(tui::layout::Corner::BottomLeft)
@@ -469,17 +475,18 @@ fn draw_default_screen(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>
             .calc_state
             .registers_vec()
             .iter()
-            .map(|(k, v)| ListItem::new(format!("{k}: {}", format_num(v, state.base))))
+            .map(|(k, v)| {
+                ListItem::new(format!(
+                    "{k}: {}",
+                    format_num_ralign(v, state.base, centre_stack[0].width as usize - 5)
+                ))
+            })
             .collect::<Vec<ListItem>>(),
     )
     .block(Block::default().title("Registers").borders(Borders::ALL));
     f.render_widget(register_box, centre_stack[0]);
 
-    let stack_top = if let Some(rpn::Num::Int(n)) = state.calc_state.stack_last() {
-        *n
-    } else {
-        0
-    };
+    let stack_top: rpn::Num = *state.calc_state.stack_last().unwrap_or(&0.into());
     let stack_size = state.calc_state.stack_size();
     let base = match state.base {
         Base::Binary => "bin",
@@ -517,6 +524,17 @@ Hex: {stack_top:>20x}"
         .block(Block::default().title("Input").borders(Borders::ALL))
         .wrap(Wrap { trim: false });
     f.render_widget(input_box, root[1]);
+}
+
+/// Formats a number based on the base selected. Right-aligns to the
+/// provided width.
+fn format_num_ralign(n: &rpn::Num, base: Base, width: usize) -> String {
+    match base {
+        Base::Binary => format!("{n:>width$b}", width = width),
+        Base::Octal => format!("{n:>width$o}", width = width),
+        Base::Decimal => format!("{n:>width$}", width = width),
+        Base::Hex => format!("{n:>width$x}", width = width),
+    }
 }
 
 /// Formats a number based on the base selected.

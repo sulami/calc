@@ -405,8 +405,8 @@ impl Num {
 impl Display for Num {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Int(n) => write!(f, "{n}"),
-            Self::Float(n) => write!(f, "{n}"),
+            Self::Int(n) => f.pad(&format!("{n}")),
+            Self::Float(n) => f.pad(&format!("{n}")),
         }
     }
 }
@@ -414,8 +414,8 @@ impl Display for Num {
 impl std::fmt::Binary for Num {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Int(n) => write!(f, "{n:b}"),
-            Self::Float(n) => write!(f, "{:b}", n.round() as i128),
+            Self::Int(n) => f.pad(&format!("{n:>b}")),
+            Self::Float(n) => f.pad(&format!("{:b}", n.round() as i128)),
         }
     }
 }
@@ -423,8 +423,8 @@ impl std::fmt::Binary for Num {
 impl std::fmt::Octal for Num {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Int(n) => write!(f, "{n:o}"),
-            Self::Float(n) => write!(f, "{:o}", n.round() as i128),
+            Self::Int(n) => f.pad(&format!("{n:o}")),
+            Self::Float(n) => f.pad(&format!("{:o}", n.round() as i128)),
         }
     }
 }
@@ -432,8 +432,8 @@ impl std::fmt::Octal for Num {
 impl std::fmt::LowerHex for Num {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Int(n) => write!(f, "{n:x}"),
-            Self::Float(n) => write!(f, "{:x}", n.round() as i128),
+            Self::Int(n) => f.pad(&format!("{n:x}")),
+            Self::Float(n) => f.pad(&format!("{:x}", n.round() as i128)),
         }
     }
 }
