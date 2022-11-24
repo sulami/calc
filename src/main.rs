@@ -9,7 +9,7 @@ use crossterm::{
 use tui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table, Wrap},
     Frame, Terminal,
 };
 
@@ -17,6 +17,7 @@ use rpn::Op;
 
 mod rpn;
 
+/// The global app state.
 #[derive(Default)]
 struct State {
     calc_state: rpn::State,
@@ -26,10 +27,16 @@ struct State {
     message: Option<String>,
 }
 
+/// The different main modes the app can be in. Defines the
+/// keybindings, and in some cases display.
 enum InputMode {
+    // TODO Split into different bases. Implement hex, oct, and bin
+    // format for Num. Factor out input handling to accept different
+    // sets of number keys.
     Normal,
     StoreRegister,
     RecallRegister,
+    Help,
 }
 
 impl Default for InputMode {
@@ -55,7 +62,11 @@ fn main() -> Result<()> {
 
 /// Main event loop, call once.
 fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
-    let mut state = State::default();
+    let mut state = State {
+        message: Some("hit h for help".to_string()),
+        ..State::default()
+    };
+
     terminal.draw(|f| draw_ui(&state, f))?;
 
     loop {
@@ -82,6 +93,7 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                             state = try_op(state, Op::Floor);
                         }
                         'E' => state = try_op(state, Op::Push(std::f64::consts::E.into())),
+                        'h' => state.mode = InputMode::Help,
                         'k' => state = try_op(state, Op::Drop),
                         'L' => {
                             state = insert_input(state);
@@ -218,6 +230,16 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
                 }
                 terminal.draw(|f| draw_ui(&state, f))?;
             }
+            InputMode::Help => {
+                if let Event::Key(KeyEvent {
+                    code: KeyCode::Char('h'),
+                    ..
+                }) = read()?
+                {
+                    state.mode = InputMode::Normal;
+                }
+                terminal.draw(|f| draw_ui(&state, f))?;
+            }
         }
     }
 }
@@ -270,6 +292,70 @@ fn undo(mut state: State) -> State {
 
 /// Redraws the UI based on the current state.
 fn draw_ui(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
+    match state.mode {
+        InputMode::Help => draw_help_screen(f),
+        _ => draw_default_screen(state, f),
+    }
+}
+
+/// Draws the help screen interface.
+fn draw_help_screen(f: &mut Frame<CrosstermBackend<io::Stdout>>) {
+    let root = Layout::default()
+        .margin(1)
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+        .split(f.size());
+
+    let header = Row::new(vec![Cell::from("Key"), Cell::from("Action")]).bottom_margin(1);
+
+    let left_table = Table::new(vec![
+        Row::new(vec!["0-9, a-z", "number input"]),
+        Row::new(vec!["enter", "push to stack"]),
+        Row::new(vec!["u", "undo"]),
+        Row::new(vec!["h", "toggle help screen"]),
+        Row::new(vec!["Q", "quit"]).bottom_margin(1),
+        Row::new(vec!["k", "drop"]),
+        Row::new(vec!["s", "swap"]),
+        Row::new(vec!["R", "rotate stack"]).bottom_margin(1),
+        Row::new(vec!["x <key>", "store to register"]),
+        Row::new(vec!["y <key>", "recall from register"]).bottom_margin(1),
+        Row::new(vec!["E", "push euler's number"]),
+        Row::new(vec!["P", "push pi"]),
+        Row::new(vec!["#", "push random float 0<f<1"]),
+    ])
+    .header(header.clone())
+    .column_spacing(1)
+    .widths([Constraint::Length(8), Constraint::Percentage(90)].as_ref());
+    f.render_widget(left_table, root[0]);
+
+    let right_table = Table::new(vec![
+        Row::new(vec!["+", "add"]),
+        Row::new(vec!["-", "subtract"]),
+        Row::new(vec!["*", "multiply"]),
+        Row::new(vec!["/", "divide"]),
+        Row::new(vec!["\\", "invert (1/x)"]),
+        Row::new(vec!["^", "power"]),
+        Row::new(vec!["L", "ln"]),
+        Row::new(vec!["V", "square root"]),
+        Row::new(vec!["A", "absolute"]),
+        Row::new(vec!["%", "modulo"]),
+        Row::new(vec!["R", "remainder"]),
+        Row::new(vec!["S", "sine"]),
+        Row::new(vec!["C", "cosine"]),
+        Row::new(vec!["T", "tangent"]),
+        Row::new(vec!["~", "round"]),
+        Row::new(vec!["D", "round down"]),
+        Row::new(vec!["U", "round up"]),
+    ])
+    .header(header)
+    .column_spacing(1)
+    .widths([Constraint::Length(8), Constraint::Percentage(50)].as_ref());
+
+    f.render_widget(right_table, root[1]);
+}
+
+/// Draws the default screen interface.
+fn draw_default_screen(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
     let root = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
