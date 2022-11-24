@@ -22,26 +22,41 @@ mod rpn;
 struct State {
     calc_state: rpn::State,
     history: Vec<(Op, rpn::State)>,
-    mode: InputMode,
+    mode: Mode,
+    base: Base,
     input: String,
     message: Option<String>,
 }
 
-/// The different main modes the app can be in. Defines the
-/// keybindings, and in some cases display.
-enum InputMode {
-    // TODO Split into different bases. Implement hex, oct, and bin
-    // format for Num. Factor out input handling to accept different
-    // sets of number keys.
+/// The different main modes the app can be in. Defines the display
+/// and keybindings.
+#[derive(Copy, Clone)]
+enum Mode {
     Normal,
     StoreRegister,
     RecallRegister,
     Help,
+    Exit,
 }
 
-impl Default for InputMode {
+impl Default for Mode {
     fn default() -> Self {
         Self::Normal
+    }
+}
+
+/// The different number bases for input and display.
+#[derive(Copy, Clone)]
+enum Base {
+    Binary,
+    Octal,
+    Decimal,
+    Hex,
+}
+
+impl Default for Base {
+    fn default() -> Self {
+        Self::Decimal
     }
 }
 
@@ -71,177 +86,222 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
 
     loop {
         match state.mode {
-            InputMode::Normal => {
-                match read()? {
-                    Event::Key(KeyEvent {
-                        code: KeyCode::Char(c),
-                        ..
-                    }) => match c {
-                        '0'..='9' => state.input.push(c),
-                        '.' => {
-                            if !state.input.contains('.') {
-                                state.input.push(c)
-                            }
-                        }
-                        'A' => state = try_op(state, Op::Absolute),
-                        'C' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::Cosine);
-                        }
-                        'D' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::Floor);
-                        }
-                        'E' => state = try_op(state, Op::Push(std::f64::consts::E.into())),
-                        'h' => state.mode = InputMode::Help,
-                        'k' => state = try_op(state, Op::Drop),
-                        'L' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::NaturalLogarithm);
-                        }
-                        'n' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::Negate);
-                        }
-                        'P' => state = try_op(state, Op::Push(std::f64::consts::PI.into())),
-                        'r' => state = try_op(state, Op::Rotate),
-                        'R' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::Remainder);
-                        }
-                        's' => state = try_op(state, Op::Swap),
-                        'S' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::Sine);
-                        }
-                        'T' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::Tangent);
-                        }
-                        'u' => state = undo(state),
-                        'U' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::Ceiling);
-                        }
-                        'V' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::SquareRoot);
-                        }
-                        'x' => {
-                            state = insert_input(state);
-                            state.message = Some("enter register name".to_string());
-                            state.mode = InputMode::StoreRegister;
-                        }
-                        'y' => {
-                            state = insert_input(state);
-                            state.message = Some("enter register name".to_string());
-                            state.mode = InputMode::RecallRegister;
-                        }
-                        '+' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::Add);
-                        }
-                        '-' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::Subtract);
-                        }
-                        '*' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::Multiply);
-                        }
-                        '/' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::Divide);
-                        }
-                        '^' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::Pow);
-                        }
-                        '%' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::Modulo);
-                        }
-                        '~' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::Round);
-                        }
-                        '\\' => {
-                            state = insert_input(state);
-                            state = try_op(state, Op::Invert);
-                        }
-                        '#' => state = try_op(state, Op::Push(rand::random::<f64>().into())),
-                        'Q' => return Ok(()),
-                        _ => (),
-                    },
-                    Event::Key(KeyEvent { code: key, .. }) => match key {
-                        KeyCode::Enter => {
-                            state = if state.input.is_empty() {
-                                push(state)
-                            } else {
-                                insert_input(state)
-                            }
-                        }
-                        KeyCode::Backspace => {
-                            if !state.input.is_empty() {
-                                let _ = state.input.pop();
-                            }
-                        }
-                        KeyCode::Delete => state = try_op(state, Op::Clear),
-                        _ => (),
-                    },
-                    _ => (),
-                }
-
+            Mode::Normal => {
+                state = normal_mode_handler(state, read()?)?;
                 terminal.draw(|f| draw_ui(&state, f))?;
 
                 if state.message.is_some() {
                     state.message = None;
                 }
             }
-            InputMode::StoreRegister => {
-                if let Event::Key(KeyEvent {
-                    code: KeyCode::Char(c),
-                    ..
-                }) = read()?
-                {
-                    state.mode = InputMode::Normal;
-                    state.message = None;
-                    match c {
-                        'a'..='z' => state = try_op(state, Op::Store(c)),
-                        'A'..='Z' => state = try_op(state, Op::Store(c)),
-                        _ => state.message = Some("invalid register name".to_string()),
-                    }
-                }
+            Mode::StoreRegister => {
+                state = store_mode_handler(state, read()?)?;
                 terminal.draw(|f| draw_ui(&state, f))?;
             }
-            InputMode::RecallRegister => {
-                if let Event::Key(KeyEvent {
-                    code: KeyCode::Char(c),
-                    ..
-                }) = read()?
-                {
-                    state.mode = InputMode::Normal;
-                    state.message = None;
-                    match c {
-                        'a'..='z' => state = try_op(state, Op::Recall(c)),
-                        'A'..='Z' => state = try_op(state, Op::Recall(c)),
-                        _ => state.message = Some("invalid register name".to_string()),
-                    }
-                }
+            Mode::RecallRegister => {
+                state = recall_mode_handler(state, read()?)?;
                 terminal.draw(|f| draw_ui(&state, f))?;
             }
-            InputMode::Help => {
-                if let Event::Key(KeyEvent {
-                    code: KeyCode::Char('h'),
-                    ..
-                }) = read()?
-                {
-                    state.mode = InputMode::Normal;
-                }
+            Mode::Help => {
+                state = help_mode_handler(state, read()?)?;
                 terminal.draw(|f| draw_ui(&state, f))?;
             }
+            Mode::Exit => return Ok(()),
         }
     }
+}
+
+/// Input handler for regular calculator operation.
+fn normal_mode_handler(mut state: State, event: Event) -> Result<State> {
+    match event {
+        Event::Key(KeyEvent {
+            code: KeyCode::Char(c),
+            ..
+        }) => match c {
+            '0'..='9' | 'a'..='f' => match (state.base, c) {
+                (_, '0'..='1') => state.input.push(c),
+                (Base::Octal | Base::Decimal | Base::Hex, '2'..='8') => state.input.push(c),
+                (Base::Decimal | Base::Hex, '9') => state.input.push(c),
+                (Base::Hex, _) => state.input.push(c),
+                _ => (),
+            },
+            '.' => {
+                if let Base::Decimal = state.base {
+                    if !state.input.contains('.') {
+                        state.input.push(c)
+                    }
+                }
+            }
+            'A' => state = try_op(state, Op::Absolute),
+            'C' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Cosine);
+            }
+            'D' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Floor);
+            }
+            'E' => state = try_op(state, Op::Push(std::f64::consts::E.into())),
+            'h' => state.mode = Mode::Help,
+            'k' => state = try_op(state, Op::Drop),
+            'L' => {
+                state = insert_input(state);
+                state = try_op(state, Op::NaturalLogarithm);
+            }
+            'n' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Negate);
+            }
+            'P' => state = try_op(state, Op::Push(std::f64::consts::PI.into())),
+            'r' => state = try_op(state, Op::Rotate),
+            'R' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Remainder);
+            }
+            's' => state = try_op(state, Op::Swap),
+            'S' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Sine);
+            }
+            'T' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Tangent);
+            }
+            'u' => state = undo(state),
+            'U' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Ceiling);
+            }
+            'V' => {
+                state = insert_input(state);
+                state = try_op(state, Op::SquareRoot);
+            }
+            'x' => {
+                state = insert_input(state);
+                state.message = Some("enter register name".to_string());
+                state.mode = Mode::StoreRegister;
+            }
+            'y' => {
+                state = insert_input(state);
+                state.message = Some("enter register name".to_string());
+                state.mode = Mode::RecallRegister;
+            }
+            '+' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Add);
+            }
+            '-' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Subtract);
+            }
+            '*' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Multiply);
+            }
+            '/' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Divide);
+            }
+            '^' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Pow);
+            }
+            '%' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Modulo);
+            }
+            '~' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Round);
+            }
+            '\\' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Invert);
+            }
+            '#' => state = try_op(state, Op::Push(rand::random::<f64>().into())),
+            'Q' => state.mode = Mode::Exit,
+            _ => (),
+        },
+        Event::Key(KeyEvent { code: key, .. }) => match key {
+            KeyCode::Enter => {
+                state = if state.input.is_empty() {
+                    push(state)
+                } else {
+                    insert_input(state)
+                }
+            }
+            KeyCode::Backspace => {
+                if !state.input.is_empty() {
+                    let _ = state.input.pop();
+                }
+            }
+            KeyCode::Delete => state = try_op(state, Op::Clear),
+            KeyCode::Tab => {
+                // NB Avoid having input with out of range numbers
+                // buffered in input.
+                state.input.clear();
+                state.base = match state.base {
+                    Base::Binary => Base::Octal,
+                    Base::Octal => Base::Decimal,
+                    Base::Decimal => Base::Hex,
+                    Base::Hex => Base::Binary,
+                };
+            }
+            _ => (),
+        },
+        _ => (),
+    }
+
+    Ok(state)
+}
+
+/// Input handler for store register.
+fn store_mode_handler(mut state: State, event: Event) -> Result<State> {
+    if let Event::Key(KeyEvent {
+        code: KeyCode::Char(c),
+        ..
+    }) = event
+    {
+        state.mode = Mode::Normal;
+        state.message = None;
+        match c {
+            'a'..='z' => state = try_op(state, Op::Store(c)),
+            'A'..='Z' => state = try_op(state, Op::Store(c)),
+            _ => state.message = Some("invalid register name".to_string()),
+        }
+    }
+    Ok(state)
+}
+
+/// Input handler for recall register.
+fn recall_mode_handler(mut state: State, event: Event) -> Result<State> {
+    if let Event::Key(KeyEvent {
+        code: KeyCode::Char(c),
+        ..
+    }) = event
+    {
+        state.mode = Mode::Normal;
+        state.message = None;
+        match c {
+            'a'..='z' => state = try_op(state, Op::Recall(c)),
+            'A'..='Z' => state = try_op(state, Op::Recall(c)),
+            _ => state.message = Some("invalid register name".to_string()),
+        }
+    }
+    Ok(state)
+}
+
+/// Input handler for help mode.
+fn help_mode_handler(mut state: State, event: Event) -> Result<State> {
+    if let Event::Key(KeyEvent {
+        code: KeyCode::Char('h'),
+        ..
+    }) = event
+    {
+        state.mode = Mode::Normal;
+    }
+
+    Ok(state)
 }
 
 /// If the stack is non-empty, push the last element again, noop
@@ -257,12 +317,23 @@ fn push(mut state: State) -> State {
 /// Inserts the current input if any, noop otherwise.
 fn insert_input(mut state: State) -> State {
     if !state.input.is_empty() {
-        let num = state
-            .input
-            .parse::<i128>()
+        let base = match state.base {
+            Base::Binary => 2,
+            Base::Octal => 8,
+            Base::Decimal => 10,
+            Base::Hex => 16,
+        };
+        let num = i128::from_str_radix(&state.input, base)
             .map(rpn::Num::from)
-            .or_else(|_| state.input.parse::<f64>().map(rpn::Num::from))
-            .expect("Invalid number");
+            .ok()
+            .or_else(|| -> Option<rpn::Num> {
+                if let Base::Decimal = state.base {
+                    state.input.parse::<f64>().map(rpn::Num::from).ok()
+                } else {
+                    None
+                }
+            })
+            .expect("invalid number");
         let op = Op::Push(num);
         state = try_op(state, op);
         state.input.clear();
@@ -293,7 +364,7 @@ fn undo(mut state: State) -> State {
 /// Redraws the UI based on the current state.
 fn draw_ui(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
     match state.mode {
-        InputMode::Help => draw_help_screen(f),
+        Mode::Help => draw_help_screen(f),
         _ => draw_default_screen(state, f),
     }
 }
@@ -312,6 +383,7 @@ fn draw_help_screen(f: &mut Frame<CrosstermBackend<io::Stdout>>) {
         Row::new(vec!["0-9, a-z", "number input"]),
         Row::new(vec!["enter", "push to stack"]),
         Row::new(vec!["u", "undo"]),
+        Row::new(vec!["tab", "switch input mode"]),
         Row::new(vec!["h", "toggle help screen"]),
         Row::new(vec!["Q", "quit"]).bottom_margin(1),
         Row::new(vec!["k", "drop"]),
@@ -385,7 +457,7 @@ fn draw_default_screen(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>
             .stack_vec()
             .iter()
             .rev()
-            .map(|i| ListItem::new(format!("{i}")))
+            .map(|i| ListItem::new(format_num(i, state.base)))
             .collect::<Vec<ListItem>>(),
     )
     .start_corner(tui::layout::Corner::BottomLeft)
@@ -397,7 +469,7 @@ fn draw_default_screen(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>
             .calc_state
             .registers_vec()
             .iter()
-            .map(|(k, v)| ListItem::new(format!("{k}: {v}")))
+            .map(|(k, v)| ListItem::new(format!("{k}: {}", format_num(v, state.base))))
             .collect::<Vec<ListItem>>(),
     )
     .block(Block::default().title("Registers").borders(Borders::ALL));
@@ -409,10 +481,16 @@ fn draw_default_screen(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>
         0
     };
     let stack_size = state.calc_state.stack_size();
+    let base = match state.base {
+        Base::Binary => "bin",
+        Base::Octal => "oct",
+        Base::Decimal => "dec",
+        Base::Hex => "hex",
+    };
 
     let info_box = Paragraph::new(format!(
         "Status: Fully operational
-Input mode:           Dec
+Input mode: {base:>13}
 Stack size: {stack_size:>13}
 ─────────────────────────
 Bin: {stack_top:>20b}
@@ -428,7 +506,7 @@ Hex: {stack_top:>20x}"
             .history
             .iter()
             .rev()
-            .map(|(op, s)| ListItem::new(format_history_event(s, op)))
+            .map(|(op, s)| ListItem::new(format_history_event(s, op, state.base)))
             .collect::<Vec<ListItem>>(),
     )
     .start_corner(tui::layout::Corner::BottomLeft)
@@ -441,67 +519,80 @@ Hex: {stack_top:>20x}"
     f.render_widget(input_box, root[1]);
 }
 
+/// Formats a number based on the base selected.
+fn format_num(n: &rpn::Num, base: Base) -> String {
+    match base {
+        Base::Binary => format!("{n:b}"),
+        Base::Octal => format!("{n:o}"),
+        Base::Decimal => format!("{n}"),
+        Base::Hex => format!("{n:x}"),
+    }
+}
+
 /// Formats a history event for display to the user.
-fn format_history_event(state: &rpn::State, op: &Op) -> String {
+fn format_history_event(state: &rpn::State, op: &Op, base: Base) -> String {
     let stack_size = state.stack_size();
     match op {
-        Op::Push(n) => format!("-> {n}"),
-        Op::Rotate => ">>>".to_string(),
+        Op::Push(n) => format!("-> {}", format_num(n, base)),
+        Op::Rotate => "⭮".to_string(),
         Op::Swap => format!(
             "{} <-> {}",
-            state.stack_get(stack_size - 2).unwrap(),
-            state.stack_get(stack_size - 1).unwrap()
+            format_num(state.stack_get(stack_size - 2).unwrap(), base),
+            format_num(state.stack_get(stack_size - 1).unwrap(), base),
         ),
-        Op::Drop => format!("<- {}", state.stack_last().unwrap()),
-        Op::Negate => format!("(-) {}", state.stack_last().unwrap()),
+        Op::Drop => format!("<- {}", format_num(state.stack_last().unwrap(), base)),
+        Op::Negate => format!("(-) {}", format_num(state.stack_last().unwrap(), base)),
         Op::Clear => "- clear -".to_string(),
-        Op::Store(k) => format!("store {} -> {k}", state.stack_last().unwrap()),
+        Op::Store(k) => format!(
+            "store {} -> {k}",
+            format_num(state.stack_last().unwrap(), base)
+        ),
         Op::Recall(k) => format!("recall {k}"),
         Op::Add => format!(
             "{} + {}",
-            state.stack_get(stack_size - 2).unwrap(),
-            state.stack_get(stack_size - 1).unwrap()
+            format_num(state.stack_get(stack_size - 2).unwrap(), base),
+            format_num(state.stack_get(stack_size - 1).unwrap(), base)
         ),
         Op::Subtract => format!(
             "{} - {}",
-            state.stack_get(stack_size - 2).unwrap(),
-            state.stack_get(stack_size - 1).unwrap()
+            format_num(state.stack_get(stack_size - 2).unwrap(), base),
+            format_num(state.stack_get(stack_size - 1).unwrap(), base)
         ),
         Op::Multiply => format!(
             "{} × {}",
-            state.stack_get(stack_size - 2).unwrap(),
-            state.stack_get(stack_size - 1).unwrap()
+            format_num(state.stack_get(stack_size - 2).unwrap(), base),
+            format_num(state.stack_get(stack_size - 1).unwrap(), base)
         ),
         Op::Divide => format!(
             "{} / {}",
-            state.stack_get(stack_size - 2).unwrap(),
-            state.stack_get(stack_size - 1).unwrap()
+            format_num(state.stack_get(stack_size - 2).unwrap(), base),
+            format_num(state.stack_get(stack_size - 1).unwrap(), base)
         ),
         Op::Pow => format!(
             "{} ^ {}",
-            state.stack_get(stack_size - 2).unwrap(),
-            state.stack_get(stack_size - 1).unwrap()
+            format_num(state.stack_get(stack_size - 2).unwrap(), base),
+            format_num(state.stack_get(stack_size - 1).unwrap(), base)
         ),
-        Op::Absolute => format!("|{}|", state.stack_last().unwrap()),
+        Op::Absolute => format!("|{}|", format_num(state.stack_last().unwrap(), base)),
         Op::Modulo => format!(
             "{} mod {}",
-            state.stack_get(stack_size - 2).unwrap(),
-            state.stack_get(stack_size - 1).unwrap()
+            format_num(state.stack_get(stack_size - 2).unwrap(), base),
+            format_num(state.stack_get(stack_size - 1).unwrap(), base)
         ),
         Op::Remainder => format!(
             "{} rem {}",
-            state.stack_get(stack_size - 2).unwrap(),
-            state.stack_get(stack_size - 1).unwrap()
+            format_num(state.stack_get(stack_size - 2).unwrap(), base),
+            format_num(state.stack_get(stack_size - 1).unwrap(), base)
         ),
-        Op::Round => format!("≈ {}", state.stack_last().unwrap()),
-        Op::Floor => format!("↓ {}", state.stack_last().unwrap()),
-        Op::Ceiling => format!("↑ {}", state.stack_last().unwrap()),
-        Op::Sine => format!("sin {}", state.stack_last().unwrap()),
-        Op::Cosine => format!("cos {}", state.stack_last().unwrap()),
-        Op::Tangent => format!("tan {}", state.stack_last().unwrap()),
-        Op::SquareRoot => format!("√ {}", state.stack_last().unwrap()),
-        Op::NaturalLogarithm => format!("ln {}", state.stack_last().unwrap()),
-        Op::Invert => format!("1 / {}", state.stack_last().unwrap()),
+        Op::Round => format!("≈ {}", format_num(state.stack_last().unwrap(), base)),
+        Op::Floor => format!("↓ {}", format_num(state.stack_last().unwrap(), base)),
+        Op::Ceiling => format!("↑ {}", format_num(state.stack_last().unwrap(), base)),
+        Op::Sine => format!("sin {}", format_num(state.stack_last().unwrap(), base)),
+        Op::Cosine => format!("cos {}", format_num(state.stack_last().unwrap(), base)),
+        Op::Tangent => format!("tan {}", format_num(state.stack_last().unwrap(), base)),
+        Op::SquareRoot => format!("√ {}", format_num(state.stack_last().unwrap(), base)),
+        Op::NaturalLogarithm => format!("ln {}", format_num(state.stack_last().unwrap(), base)),
+        Op::Invert => format!("1 / {}", format_num(state.stack_last().unwrap(), base)),
         _ => format!("{state:?} -> {op:?}"),
     }
 }
