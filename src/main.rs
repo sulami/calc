@@ -83,6 +83,8 @@ fn event_loop(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<(
     };
 
     terminal.draw(|f| draw_ui(&state, f))?;
+    // Remove "hit h for help" on first re-render.
+    state.message = None;
 
     loop {
         match state.mode {
