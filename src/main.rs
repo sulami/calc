@@ -501,12 +501,16 @@ fn draw_default_screen(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>
         Base::Decimal => "dec",
         Base::Hex => "hex",
     };
+    let num_type = match stack_top {
+        rpn::Num::Int(_) => "integer",
+        rpn::Num::Float(_) => "float",
+    };
 
     let info_box = Paragraph::new(format!(
-        "Status: Fully operational
-Input mode: {base:>13}
+        "Input mode: {base:>13}
 Stack size: {stack_size:>13}
 ─────────────────────────
+Type: {num_type:>19}
 Bin: {stack_top:>20b}
 Oct: {stack_top:>20o}
 Dec: {stack_top:>20}
