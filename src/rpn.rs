@@ -500,13 +500,9 @@ impl std::ops::Div for Num {
     type Output = Result<Self, RPNError>;
 
     fn div(self, rhs: Self) -> Self::Output {
-        if rhs.is_zero() {
-            return Err(RPNError::DivisionByZero);
-        }
         match (self, rhs) {
-            (Self::Int(a), Self::Int(b)) => {
-                Ok(Self::Int(a.checked_div(b).ok_or(RPNError::Overflow)?))
-            }
+            (_, Self::Int(0)) => Err(RPNError::DivisionByZero),
+            (Self::Int(a), Self::Int(b)) => Ok(Self::Float(a as f64 / b as f64)),
             (Self::Int(a), Self::Float(b)) => Ok(Self::Float(a as f64 / b)),
             (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a / b as f64)),
             (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a / b)),
@@ -951,19 +947,6 @@ mod tests {
             &[
                 Op::Push(2.into()),
                 Op::Push((0).into()),
-                Op::IntegerDivision,
-            ],
-            [16.0],
-        );
-    }
-
-    #[test]
-    #[should_panic(expected = "division by zero")]
-    fn integer_division_refuses_negative_float_divisor() {
-        run_and_compare_stack(
-            &[
-                Op::Push(2.into()),
-                Op::Push((0.0).into()),
                 Op::IntegerDivision,
             ],
             [16.0],
