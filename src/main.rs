@@ -154,9 +154,9 @@ fn normal_mode_handler(mut state: State, event: Event) -> Result<State> {
             }
             'P' => state = try_op(state, Op::Push(std::f64::consts::PI.into())),
             'q' => state = try_op(state, Op::Rotate),
-            'R' => {
+            'i' => {
                 state = insert_input(state);
-                state = try_op(state, Op::Remainder);
+                state = try_op(state, Op::IntegerDivision);
             }
             'w' => state = try_op(state, Op::Swap),
             'S' => {
@@ -411,7 +411,7 @@ fn draw_help_screen(f: &mut Frame<CrosstermBackend<io::Stdout>>) {
         Row::new(vec!["V", "square root"]),
         Row::new(vec!["A", "absolute"]),
         Row::new(vec!["%", "modulo"]),
-        Row::new(vec!["R", "remainder"]),
+        Row::new(vec!["i", "integer division"]),
         Row::new(vec!["S", "sine"]),
         Row::new(vec!["C", "cosine"]),
         Row::new(vec!["T", "tangent"]),
@@ -597,8 +597,8 @@ fn format_history_event(state: &rpn::State, op: &Op, base: Base) -> String {
             format_num(state.stack_get(stack_size - 2).unwrap(), base),
             format_num(state.stack_get(stack_size - 1).unwrap(), base)
         ),
-        Op::Remainder => format!(
-            "{} rem {}",
+        Op::IntegerDivision => format!(
+            "{} // {}",
             format_num(state.stack_get(stack_size - 2).unwrap(), base),
             format_num(state.stack_get(stack_size - 1).unwrap(), base)
         ),

@@ -158,7 +158,7 @@ impl State {
                 let _ = self.stack.pop();
                 self.stack.push(result);
             }
-            Op::Remainder => {
+            Op::IntegerDivision => {
                 self.require_stack(2)?;
                 let a = self
                     .stack
@@ -168,7 +168,7 @@ impl State {
                     .stack
                     .get(stack_size - 1)
                     .expect("failed to peek at stack");
-                let result = a.rem(*b)?;
+                let result = a.integer_division(*b)?;
                 let _ = self.stack.pop();
                 let _ = self.stack.pop();
                 self.stack.push(result);
@@ -382,22 +382,22 @@ impl Num {
         match (self, rhs) {
             (_, Self::Int(0)) => Err(RPNError::DivisionByZero),
             (_, Self::Float(b)) if b == 0.0 => Err(RPNError::DivisionByZero),
-            (Self::Int(a), Self::Int(b)) => Ok(Self::Int(a.div_euclid(b))),
-            (Self::Int(a), Self::Float(b)) => Ok(Self::Float((a as f64).div_euclid(b))),
-            (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a.div_euclid(b as f64))),
-            (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a.div_euclid(b))),
-        }
-    }
-
-    /// Returns the remainder.
-    fn rem(self, rhs: Self) -> Result<Self, RPNError> {
-        match (self, rhs) {
-            (_, Self::Int(0)) => Err(RPNError::DivisionByZero),
-            (_, Self::Float(b)) if b == 0.0 => Err(RPNError::DivisionByZero),
             (Self::Int(a), Self::Int(b)) => Ok(Self::Int(a.rem_euclid(b))),
             (Self::Int(a), Self::Float(b)) => Ok(Self::Float((a as f64).rem_euclid(b))),
             (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a.rem_euclid(b as f64))),
             (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a.rem_euclid(b))),
+        }
+    }
+
+    /// Returns the integer division.
+    fn integer_division(self, rhs: Self) -> Result<Self, RPNError> {
+        match (self, rhs) {
+            (_, Self::Int(0)) => Err(RPNError::DivisionByZero),
+            (_, Self::Float(b)) if b == 0.0 => Err(RPNError::DivisionByZero),
+            (Self::Int(a), Self::Int(b)) => Ok(Self::Int(a.div_euclid(b))),
+            (Self::Int(a), Self::Float(b)) => Ok(Self::Float((a as f64).div_euclid(b))),
+            (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a.div_euclid(b as f64))),
+            (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a.div_euclid(b))),
         }
     }
 }
@@ -530,7 +530,7 @@ pub enum Op {
     Divide,
     Multiply,
     Modulo,
-    Remainder,
+    IntegerDivision,
     Pow,
     Logrithm,
     // Unary operators
@@ -890,67 +890,94 @@ mod tests {
     }
 
     #[test]
-    fn mod_works() {
-        run_and_compare_stack(&[Op::Push(10.into()), Op::Push(3.into()), Op::Modulo], [3]);
+    fn integer_division_works() {
+        run_and_compare_stack(
+            &[Op::Push(10.into()), Op::Push(3.into()), Op::IntegerDivision],
+            [3],
+        );
     }
 
     #[test]
-    fn mod_works_with_float_divisor() {
+    fn integer_division_works_with_float_divisor() {
         run_and_compare_stack(
-            &[Op::Push(10.into()), Op::Push(3.0.into()), Op::Modulo],
+            &[
+                Op::Push(10.into()),
+                Op::Push(3.0.into()),
+                Op::IntegerDivision,
+            ],
             [3.0],
         );
     }
 
     #[test]
-    fn mod_works_with_float_dividend() {
+    fn integer_division_works_with_float_dividend() {
         run_and_compare_stack(
-            &[Op::Push(10.0.into()), Op::Push(3.into()), Op::Modulo],
+            &[
+                Op::Push(10.0.into()),
+                Op::Push(3.into()),
+                Op::IntegerDivision,
+            ],
             [3.0],
         );
     }
 
     #[test]
-    fn mod_works_with_float_both() {
+    fn integer_division_works_with_float_both() {
         run_and_compare_stack(
-            &[Op::Push(10.0.into()), Op::Push(3.0.into()), Op::Modulo],
+            &[
+                Op::Push(10.0.into()),
+                Op::Push(3.0.into()),
+                Op::IntegerDivision,
+            ],
             [3.0],
         );
     }
 
     #[test]
     #[should_panic(expected = "requires at least 2 items on the stack")]
-    fn mod_errors_on_empty_stack() {
-        run_and_compare_stack(&[Op::Modulo], [42]);
+    fn integer_division_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::IntegerDivision], [42]);
     }
 
     #[test]
     #[should_panic(expected = "requires at least 2 items on the stack")]
-    fn mod_errors_with_stack_of_one() {
-        run_and_compare_stack(&[Op::Push(42.into()), Op::Modulo], [42]);
+    fn integer_division_errors_with_stack_of_one() {
+        run_and_compare_stack(&[Op::Push(42.into()), Op::IntegerDivision], [42]);
     }
 
     #[test]
     #[should_panic(expected = "division by zero")]
-    fn mod_refuses_zero_divisor() {
+    fn integer_division_refuses_zero_divisor() {
         run_and_compare_stack(
-            &[Op::Push(2.into()), Op::Push((0).into()), Op::Modulo],
+            &[
+                Op::Push(2.into()),
+                Op::Push((0).into()),
+                Op::IntegerDivision,
+            ],
             [16.0],
         );
     }
 
     #[test]
     #[should_panic(expected = "division by zero")]
-    fn mod_refuses_negative_float_divisor() {
+    fn integer_division_refuses_negative_float_divisor() {
         run_and_compare_stack(
-            &[Op::Push(2.into()), Op::Push((0.0).into()), Op::Modulo],
+            &[
+                Op::Push(2.into()),
+                Op::Push((0.0).into()),
+                Op::IntegerDivision,
+            ],
             [16.0],
         );
     }
 
     #[test]
-    fn mod_keeps_stack_intact_on_error() {
-        let ops = &[Op::Push(2.into()), Op::Push((0).into()), Op::Modulo];
+    fn integer_division_keeps_stack_intact_on_error() {
+        let ops = &[
+            Op::Push(2.into()),
+            Op::Push((0).into()),
+            Op::IntegerDivision,
+        ];
         let mut state = State::default();
         match state.run(ops) {
             Err(_) => assert_eq!(state.stack, make_stack([2, 0])),
@@ -959,70 +986,67 @@ mod tests {
     }
 
     #[test]
-    fn rem_works() {
-        run_and_compare_stack(
-            &[Op::Push(10.into()), Op::Push(3.into()), Op::Remainder],
-            [1],
-        );
+    fn modulo_works() {
+        run_and_compare_stack(&[Op::Push(10.into()), Op::Push(3.into()), Op::Modulo], [1]);
     }
 
     #[test]
-    fn rem_works_with_float_divisor() {
+    fn modulo_works_with_float_divisor() {
         run_and_compare_stack(
-            &[Op::Push(10.into()), Op::Push(3.0.into()), Op::Remainder],
+            &[Op::Push(10.into()), Op::Push(3.0.into()), Op::Modulo],
             [1.0],
         );
     }
 
     #[test]
-    fn rem_works_with_float_dividend() {
+    fn modulo_works_with_float_dividend() {
         run_and_compare_stack(
-            &[Op::Push(10.0.into()), Op::Push(3.into()), Op::Remainder],
+            &[Op::Push(10.0.into()), Op::Push(3.into()), Op::Modulo],
             [1.0],
         );
     }
 
     #[test]
-    fn rem_works_with_float_both() {
+    fn modulo_works_with_float_both() {
         run_and_compare_stack(
-            &[Op::Push(10.0.into()), Op::Push(3.0.into()), Op::Remainder],
+            &[Op::Push(10.0.into()), Op::Push(3.0.into()), Op::Modulo],
             [1.0],
         );
     }
 
     #[test]
     #[should_panic(expected = "requires at least 2 items on the stack")]
-    fn rem_errors_on_empty_stack() {
-        run_and_compare_stack(&[Op::Remainder], [42]);
+    fn modulo_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::Modulo], [42]);
     }
 
     #[test]
     #[should_panic(expected = "requires at least 2 items on the stack")]
-    fn rem_errors_with_stack_of_one() {
-        run_and_compare_stack(&[Op::Push(42.into()), Op::Remainder], [42]);
+    fn modulo_errors_with_stack_of_one() {
+        run_and_compare_stack(&[Op::Push(42.into()), Op::Modulo], [42]);
     }
 
     #[test]
     #[should_panic(expected = "division by zero")]
-    fn rem_refuses_zero_divisor() {
+    fn modulo_refuses_zero_divisor() {
         run_and_compare_stack(
-            &[Op::Push(2.into()), Op::Push((0).into()), Op::Remainder],
+            &[Op::Push(2.into()), Op::Push((0).into()), Op::Modulo],
             [16.0],
         );
     }
 
     #[test]
     #[should_panic(expected = "division by zero")]
-    fn rem_refuses_negative_float_divisor() {
+    fn modulo_refuses_negative_float_divisor() {
         run_and_compare_stack(
-            &[Op::Push(2.into()), Op::Push((0.0).into()), Op::Remainder],
+            &[Op::Push(2.into()), Op::Push((0.0).into()), Op::Modulo],
             [16.0],
         );
     }
 
     #[test]
-    fn rem_keeps_stack_intact_on_error() {
-        let ops = &[Op::Push(2.into()), Op::Push((0).into()), Op::Remainder];
+    fn modulo_keeps_stack_intact_on_error() {
+        let ops = &[Op::Push(2.into()), Op::Push((0).into()), Op::Modulo];
         let mut state = State::default();
         match state.run(ops) {
             Err(_) => assert_eq!(state.stack, make_stack([2, 0])),
