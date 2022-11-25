@@ -222,7 +222,45 @@ impl State {
                     .invert()?;
                 let _ = std::mem::replace(&mut self.stack[stack_size - 1], result);
             }
-            _ => todo!(),
+            Op::ShiftLeft => {
+                self.require_stack(1)?;
+                let result = self
+                    .stack
+                    .last()
+                    .expect("failed to peek at stack")
+                    .shift_left()?;
+                let _ = std::mem::replace(&mut self.stack[stack_size - 1], result);
+            }
+            Op::ShiftRight => {
+                self.require_stack(1)?;
+                let result = self
+                    .stack
+                    .last()
+                    .expect("failed to peek at stack")
+                    .shift_right()?;
+                let _ = std::mem::replace(&mut self.stack[stack_size - 1], result);
+            }
+            Op::BitwiseAnd => {
+                self.require_stack(2)?;
+                if let [a, b] = self.stack[stack_size - 2..stack_size] {
+                    let _ = self.stack.pop().expect("failed to pop item from stack");
+                    let _ = std::mem::replace(&mut self.stack[stack_size - 2], a & b);
+                };
+            }
+            Op::BitwiseOr => {
+                self.require_stack(2)?;
+                if let [a, b] = self.stack[stack_size - 2..stack_size] {
+                    let _ = self.stack.pop().expect("failed to pop item from stack");
+                    let _ = std::mem::replace(&mut self.stack[stack_size - 2], a | b);
+                };
+            }
+            Op::BitwiseXor => {
+                self.require_stack(2)?;
+                if let [a, b] = self.stack[stack_size - 2..stack_size] {
+                    let _ = self.stack.pop().expect("failed to pop item from stack");
+                    let _ = std::mem::replace(&mut self.stack[stack_size - 2], a ^ b);
+                };
+            }
         };
         Ok(())
     }
@@ -381,7 +419,7 @@ impl Num {
     /// Returns the modulo.
     fn modulo(self, rhs: Self) -> Result<Self, RPNError> {
         match (self, rhs) {
-            (_, Self::Int(0)) => return Err(RPNError::DivisionByZero),
+            (_, Self::Int(0)) => Err(RPNError::DivisionByZero),
             (Self::Int(a), Self::Int(b)) => Ok(Self::Int(
                 a.checked_rem_euclid(b).ok_or(RPNError::DivisionByZero)?,
             )),
@@ -394,7 +432,7 @@ impl Num {
     /// Returns the integer division.
     fn integer_division(self, rhs: Self) -> Result<Self, RPNError> {
         match (self, rhs) {
-            (_, Self::Int(0)) => return Err(RPNError::DivisionByZero),
+            (_, Self::Int(0)) => Err(RPNError::DivisionByZero),
             (Self::Int(a), Self::Int(b)) => Ok(Self::Int(
                 a.checked_div_euclid(b).ok_or(RPNError::DivisionByZero)?,
             )),
@@ -407,12 +445,28 @@ impl Num {
     /// Returns the logarithm.
     fn logarithm(self, rhs: Self) -> Result<Self, RPNError> {
         match (self, rhs) {
-            (Self::Int(0), _) => return Err(RPNError::LogarithmOfZero),
-            (_, Self::Int(1)) => return Err(RPNError::LogarithmBaseOne),
+            (Self::Int(0), _) => Err(RPNError::LogarithmOfZero),
+            (_, Self::Int(1)) => Err(RPNError::LogarithmBaseOne),
             (Self::Int(a), Self::Int(b)) => Ok(Self::Float((a as f64).log(b as f64))),
             (Self::Int(a), Self::Float(b)) => Ok(Self::Float((a as f64).log(b))),
             (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a.log(b as f64))),
             (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a.log(b))),
+        }
+    }
+
+    /// Shifts left by one bit. Rounds off floats.
+    fn shift_left(self) -> Result<Self, RPNError> {
+        match self {
+            Self::Int(n) => Ok(Self::Int(n.checked_shl(1).ok_or(RPNError::Overflow)?)),
+            Self::Float(_) => Ok(self.round().shift_left()?),
+        }
+    }
+
+    /// Shifts right by one bit. Rounds off floats.
+    fn shift_right(self) -> Result<Self, RPNError> {
+        match self {
+            Self::Int(n) => Ok(Self::Int(n.checked_shr(1).ok_or(RPNError::Overflow)?)),
+            Self::Float(_) => Ok(self.round().shift_right()?),
         }
     }
 }
@@ -535,6 +589,48 @@ impl std::ops::Neg for Num {
     }
 }
 
+impl std::ops::BitAnd for Num {
+    type Output = Self;
+
+    /// Rounds off floats.
+    fn bitand(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Int(a), Self::Int(b)) => Self::Int(a & b),
+            (Self::Int(_), Self::Float(_)) => self & rhs.round(),
+            (Self::Float(_), Self::Int(_)) => self.round() & rhs,
+            (Self::Float(_), Self::Float(_)) => self.round() & rhs.round(),
+        }
+    }
+}
+
+impl std::ops::BitOr for Num {
+    type Output = Self;
+
+    /// Rounds off floats.
+    fn bitor(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Int(a), Self::Int(b)) => Self::Int(a | b),
+            (Self::Int(_), Self::Float(_)) => self | rhs.round(),
+            (Self::Float(_), Self::Int(_)) => self.round() | rhs,
+            (Self::Float(_), Self::Float(_)) => self.round() | rhs.round(),
+        }
+    }
+}
+
+impl std::ops::BitXor for Num {
+    type Output = Self;
+
+    /// Rounds off floats.
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Int(a), Self::Int(b)) => Self::Int(a ^ b),
+            (Self::Int(_), Self::Float(_)) => self ^ rhs.round(),
+            (Self::Float(_), Self::Int(_)) => self.round() ^ rhs,
+            (Self::Float(_), Self::Float(_)) => self.round() ^ rhs.round(),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Op {
     // Stack manipulation
@@ -571,7 +667,6 @@ pub enum Op {
     BitwiseAnd,
     BitwiseOr,
     BitwiseXor,
-    BitwiseNand,
     ShiftLeft,
     ShiftRight,
 }
@@ -1223,5 +1318,123 @@ mod tests {
             &[Op::Push(10.into()), Op::Push(1.into()), Op::Logarithm],
             [2.0],
         );
+    }
+
+    #[test]
+    fn shift_left_works() {
+        run_and_compare_stack(&[Op::Push(0b10.into()), Op::ShiftLeft], [0b100]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 1 item on the stack")]
+    fn shift_left_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::ShiftLeft], [0b100]);
+    }
+
+    #[test]
+    fn shift_right_works() {
+        run_and_compare_stack(&[Op::Push(0b100.into()), Op::ShiftRight], [0b10]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 1 item on the stack")]
+    fn shift_right_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::ShiftRight], [0b100]);
+    }
+
+    #[test]
+    fn and_works() {
+        run_and_compare_stack(
+            &[
+                Op::Push(0b1111.into()),
+                Op::Push(0b1010.into()),
+                Op::BitwiseAnd,
+            ],
+            [0b1010],
+        );
+    }
+
+    #[test]
+    fn and_rounds_off_floats() {
+        run_and_compare_stack(
+            &[Op::Push(11.0.into()), Op::Push(3.0.into()), Op::BitwiseAnd],
+            [3],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
+    fn and_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::BitwiseAnd], [42]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
+    fn and_errors_with_stack_of_one() {
+        run_and_compare_stack(&[Op::Push(42.into()), Op::BitwiseAnd], [42]);
+    }
+
+    #[test]
+    fn or_works() {
+        run_and_compare_stack(
+            &[
+                Op::Push(0b1010.into()),
+                Op::Push(0b0000.into()),
+                Op::BitwiseOr,
+            ],
+            [0b1010],
+        );
+    }
+
+    #[test]
+    fn or_rounds_off_floats() {
+        run_and_compare_stack(
+            &[Op::Push(11.0.into()), Op::Push(3.0.into()), Op::BitwiseOr],
+            [11],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
+    fn or_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::BitwiseOr], [42]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
+    fn or_errors_with_stack_of_one() {
+        run_and_compare_stack(&[Op::Push(42.into()), Op::BitwiseOr], [42]);
+    }
+
+    #[test]
+    fn xor_works() {
+        run_and_compare_stack(
+            &[
+                Op::Push(0b1010.into()),
+                Op::Push(0b1000.into()),
+                Op::BitwiseXor,
+            ],
+            [0b0010],
+        );
+    }
+
+    #[test]
+    fn xor_rounds_off_floats() {
+        run_and_compare_stack(
+            &[Op::Push(11.0.into()), Op::Push(3.0.into()), Op::BitwiseXor],
+            [8],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
+    fn xor_errors_on_empty_stack() {
+        run_and_compare_stack(&[Op::BitwiseXor], [42]);
+    }
+
+    #[test]
+    #[should_panic(expected = "requires at least 2 items on the stack")]
+    fn xor_errors_with_stack_of_one() {
+        run_and_compare_stack(&[Op::Push(42.into()), Op::BitwiseXor], [42]);
     }
 }

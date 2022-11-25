@@ -224,6 +224,26 @@ fn normal_mode_handler(mut state: State, event: Event) -> Result<State> {
                 state = insert_input(state);
                 state = try_op(state, Op::Invert);
             }
+            '<' => {
+                state = insert_input(state);
+                state = try_op(state, Op::ShiftLeft);
+            }
+            '>' => {
+                state = insert_input(state);
+                state = try_op(state, Op::ShiftRight);
+            }
+            '|' => {
+                state = insert_input(state);
+                state = try_op(state, Op::BitwiseOr);
+            }
+            '&' => {
+                state = insert_input(state);
+                state = try_op(state, Op::BitwiseAnd);
+            }
+            'j' => {
+                state = insert_input(state);
+                state = try_op(state, Op::BitwiseXor);
+            }
             '#' => state = try_op(state, Op::Push(rand::random::<f64>().into())),
             'Q' => state.mode = Mode::Exit,
             _ => (),
@@ -378,7 +398,6 @@ fn draw_ui(state: &State, f: &mut Frame<CrosstermBackend<io::Stdout>>) {
 /// Draws the help screen interface.
 fn draw_help_screen(f: &mut Frame<CrosstermBackend<io::Stdout>>) {
     let root = Layout::default()
-        .margin(1)
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
         .split(f.size());
@@ -423,8 +442,11 @@ fn draw_help_screen(f: &mut Frame<CrosstermBackend<io::Stdout>>) {
         Row::new(vec!["C", "cosine"]),
         Row::new(vec!["T", "tangent"]),
         Row::new(vec!["~", "round"]),
-        Row::new(vec!["U", "round up"]),
-        Row::new(vec!["D", "round down"]),
+        Row::new(vec!["U / D", "round up/down"]),
+        Row::new(vec!["< / >", "shift left/right"]),
+        Row::new(vec!["&", "bitwise and"]),
+        Row::new(vec!["|", "bitwise or"]),
+        Row::new(vec!["j", "bitwise xor"]),
     ])
     .header(header)
     .column_spacing(1)
@@ -627,6 +649,22 @@ fn format_history_event(state: &rpn::State, op: &Op, base: Base) -> String {
             format_num(state.stack_get(stack_size - 1).unwrap(), base)
         ),
         Op::Invert => format!("1 / {}", format_num(state.stack_last().unwrap(), base)),
-        _ => format!("{state:?} -> {op:?}"),
+        Op::ShiftLeft => format!("{} << 1", format_num(state.stack_last().unwrap(), base)),
+        Op::ShiftRight => format!("{} >> 1", format_num(state.stack_last().unwrap(), base)),
+        Op::BitwiseAnd => format!(
+            "{} & {}",
+            format_num(state.stack_get(stack_size - 2).unwrap(), base),
+            format_num(state.stack_get(stack_size - 1).unwrap(), base)
+        ),
+        Op::BitwiseOr => format!(
+            "{} | {}",
+            format_num(state.stack_get(stack_size - 2).unwrap(), base),
+            format_num(state.stack_get(stack_size - 1).unwrap(), base)
+        ),
+        Op::BitwiseXor => format!(
+            "{} ⊕ {}",
+            format_num(state.stack_get(stack_size - 2).unwrap(), base),
+            format_num(state.stack_get(stack_size - 1).unwrap(), base)
+        ),
     }
 }
