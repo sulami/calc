@@ -732,6 +732,15 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "overflow")]
+    fn add_avoids_overflows() {
+        run_and_compare_stack(
+            &[Op::Push(i128::MAX.into()), Op::Push(1.into()), Op::Add],
+            [42],
+        );
+    }
+
+    #[test]
     fn subtract_works() {
         run_and_compare_stack(
             &[Op::Push(62.into()), Op::Push(20.into()), Op::Subtract],
@@ -760,6 +769,15 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "overflow")]
+    fn subtract_avoids_overflows() {
+        run_and_compare_stack(
+            &[Op::Push(i128::MIN.into()), Op::Push(1.into()), Op::Subtract],
+            [42],
+        );
+    }
+
+    #[test]
     fn multiply_works() {
         run_and_compare_stack(
             &[Op::Push(21.into()), Op::Push(2.into()), Op::Multiply],
@@ -785,6 +803,15 @@ mod tests {
     #[should_panic(expected = "requires at least 2 items on the stack")]
     fn multiply_errors_with_stack_of_one() {
         run_and_compare_stack(&[Op::Push(42.into()), Op::Multiply], [42]);
+    }
+
+    #[test]
+    #[should_panic(expected = "overflow")]
+    fn multiply_avoids_overflows() {
+        run_and_compare_stack(
+            &[Op::Push(i128::MAX.into()), Op::Push(2.into()), Op::Multiply],
+            [42],
+        );
     }
 
     #[test]
@@ -846,6 +873,12 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "overflow")]
+    fn negate_avoids_overflow() {
+        run_and_compare_stack(&[Op::Push(i128::MIN.into()), Op::Negate], [16.0]);
+    }
+
+    #[test]
     fn pow_works() {
         run_and_compare_stack(&[Op::Push(2.into()), Op::Push(4.into()), Op::Pow], [16]);
     }
@@ -900,6 +933,15 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "overflow")]
+    fn pow_avoids_overflow() {
+        run_and_compare_stack(
+            &[Op::Push(i128::MAX.into()), Op::Push(2.into()), Op::Pow],
+            [16.0],
+        );
+    }
+
+    #[test]
     fn absolute_works() {
         run_and_compare_stack(&[Op::Push((-42).into()), Op::Absolute], [42]);
     }
@@ -907,6 +949,12 @@ mod tests {
     #[test]
     fn absolute_works_for_floats() {
         run_and_compare_stack(&[Op::Push((-42.5).into()), Op::Absolute], [42.5]);
+    }
+
+    #[test]
+    #[should_panic(expected = "overflow")]
+    fn absolute_avoids_overflow() {
+        run_and_compare_stack(&[Op::Push(i128::MIN.into()), Op::Absolute], [16.0]);
     }
 
     #[test]
