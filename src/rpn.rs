@@ -93,85 +93,76 @@ impl State {
             },
             Op::Add => {
                 self.require_stack(2)?;
-                let b = self.stack.pop().expect("failed to pop item from stack");
-                let a = self.stack.pop().expect("failed to pop item from stack");
-                self.stack.push(a + b);
+                if let [a, b] = self.stack[stack_size - 2..stack_size] {
+                    (a + b).map(|result| {
+                        let _ = self.stack.pop().expect("failed to pop item from stack");
+                        let _ = std::mem::replace(&mut self.stack[stack_size - 2], result);
+                    })?;
+                };
             }
             Op::Subtract => {
                 self.require_stack(2)?;
-                let b = self.stack.pop().expect("failed to pop item from stack");
-                let a = self.stack.pop().expect("failed to pop item from stack");
-                self.stack.push(a - b);
+                if let [a, b] = self.stack[stack_size - 2..stack_size] {
+                    (a - b).map(|result| {
+                        let _ = self.stack.pop().expect("failed to pop item from stack");
+                        let _ = std::mem::replace(&mut self.stack[stack_size - 2], result);
+                    })?;
+                };
             }
             Op::Multiply => {
                 self.require_stack(2)?;
-                let b = self.stack.pop().expect("failed to pop item from stack");
-                let a = self.stack.pop().expect("failed to pop item from stack");
-                self.stack.push(a * b);
+                if let [a, b] = self.stack[stack_size - 2..stack_size] {
+                    (a * b).map(|result| {
+                        let _ = self.stack.pop().expect("failed to pop item from stack");
+                        let _ = std::mem::replace(&mut self.stack[stack_size - 2], result);
+                    })?;
+                };
             }
             Op::Divide => {
                 self.require_stack(2)?;
-                if self.stack_last().unwrap().is_zero() {
-                    return Err(RPNError::DivisionByZero);
-                }
-                let b = self.stack.pop().expect("failed to pop item from stack");
-                let a = self.stack.pop().expect("failed to pop item from stack");
-                self.stack.push(a / b);
+                if let [a, b] = self.stack[stack_size - 2..stack_size] {
+                    (a / b).map(|result| {
+                        let _ = self.stack.pop().expect("failed to pop item from stack");
+                        let _ = std::mem::replace(&mut self.stack[stack_size - 2], result);
+                    })?;
+                };
             }
             Op::Negate => {
                 self.require_stack(1)?;
-                let a = self.stack.pop().expect("failed to pop item from stack");
-                self.stack.push(-a);
+                let result = (-*self.stack.last().expect("failed to peek at stack"))?;
+                let _ = std::mem::replace(&mut self.stack[stack_size - 1], result);
             }
             Op::Pow => {
                 self.require_stack(2)?;
-                let a = self
-                    .stack
-                    .get(stack_size - 2)
-                    .expect("failed to peek at stack");
-                let b = self
-                    .stack
-                    .get(stack_size - 1)
-                    .expect("failed to peek at stack");
-                let result = a.pow(*b)?;
-                let _ = self.stack.pop();
-                let _ = self.stack.pop();
-                self.stack.push(result);
+                if let [a, b] = self.stack[stack_size - 2..stack_size] {
+                    (a.pow(b)).map(|result| {
+                        let _ = self.stack.pop().expect("failed to pop item from stack");
+                        let _ = std::mem::replace(&mut self.stack[stack_size - 2], result);
+                    })?;
+                };
             }
             Op::Absolute => {
                 self.require_stack(1)?;
-                let a = self.stack.pop().expect("failed to pop item from stack");
-                self.stack.push(a.abs());
+                let result = self.stack.last().expect("failed to peek at stack").abs()?;
+                let _ = std::mem::replace(&mut self.stack[stack_size - 1], result);
             }
             Op::Modulo => {
                 self.require_stack(2)?;
-                let a = self
-                    .stack
-                    .get(stack_size - 2)
-                    .expect("failed to peek at stack");
-                let b = self
-                    .stack
-                    .get(stack_size - 1)
-                    .expect("failed to peek at stack");
-                let result = a.modulo(*b)?;
-                let _ = self.stack.pop();
-                let _ = self.stack.pop();
-                self.stack.push(result);
+                if let [a, b] = self.stack[stack_size - 2..stack_size] {
+                    (a.modulo(b)).map(|result| {
+                        let _ = self.stack.pop().expect("failed to pop item from stack");
+                        let _ = std::mem::replace(&mut self.stack[stack_size - 2], result);
+                    })?;
+                };
             }
             Op::IntegerDivision => {
                 self.require_stack(2)?;
-                let a = self
-                    .stack
-                    .get(stack_size - 2)
-                    .expect("failed to peek at stack");
-                let b = self
-                    .stack
-                    .get(stack_size - 1)
-                    .expect("failed to peek at stack");
-                let result = a.integer_division(*b)?;
-                let _ = self.stack.pop();
-                let _ = self.stack.pop();
-                self.stack.push(result);
+                if let [a, b] = self.stack[stack_size - 2..stack_size] {
+                    (a.integer_division(b)).map(|result| {
+                        let _ = self.stack.pop().expect("failed to pop item from stack");
+                        let _ = std::mem::replace(&mut self.stack[stack_size - 2], result);
+                    })?;
+                };
             }
             Op::Round => {
                 self.require_stack(1)?;
@@ -215,8 +206,12 @@ impl State {
             }
             Op::Invert => {
                 self.require_stack(1)?;
-                let a = self.stack.pop().expect("failed to pop item from stack");
-                self.stack.push(a.invert());
+                let result = self
+                    .stack
+                    .last()
+                    .expect("failed to peek at stack")
+                    .invert()?;
+                let _ = std::mem::replace(&mut self.stack[stack_size - 1], result);
             }
             _ => todo!(),
         };
@@ -243,8 +238,8 @@ pub enum RPNError {
     RequiresStack(usize),
     /// Any of the dividing operations received a zero divisor.
     DivisionByZero,
-    /// Pow received a negative exponent.
-    NegativePow,
+    /// An operation over- or underflowed our internal number type.
+    Overflow,
     /// Register for recall was not found.
     RegisterNotFound,
 }
@@ -259,7 +254,7 @@ impl Debug for RPNError {
             }
             Self::RequiresStack(size) => write!(f, "requires at least {size} items on the stack"),
             Self::DivisionByZero => write!(f, "division by zero"),
-            Self::NegativePow => write!(f, "negative exponent"),
+            Self::Overflow => write!(f, "overflow"),
             Self::RegisterNotFound => write!(f, "register not found"),
         }
     }
@@ -288,15 +283,15 @@ impl Num {
     }
 
     /// Returns 1/n.
-    fn invert(self) -> Self {
-        Self::Int(1) / self
+    fn invert(self) -> Result<Self, RPNError> {
+        Self::Float(1.0) / self
     }
 
     /// Returns the absolute value.
-    fn abs(self) -> Self {
+    fn abs(self) -> Result<Self, RPNError> {
         match self {
-            Self::Int(n) => Self::Int(n.abs()),
-            Self::Float(n) => Self::Float(n.abs()),
+            Self::Int(n) => Ok(Self::Int(n.checked_abs().ok_or(RPNError::Overflow)?)),
+            Self::Float(n) => Ok(Self::Float(n.abs())),
         }
     }
 
@@ -368,9 +363,9 @@ impl Num {
     /// mixes of both. Refuses negative exponents.
     fn pow(self, rhs: Self) -> Result<Self, RPNError> {
         match (self, rhs) {
-            (_, Self::Int(x)) if x < 0 => Err(RPNError::NegativePow),
-            (_, Self::Float(x)) if x < 0.0 => Err(RPNError::NegativePow),
-            (Self::Int(a), Self::Int(b)) => Ok(Self::Int(a.pow(b as u32))),
+            (Self::Int(a), Self::Int(b)) => Ok(Self::Int(
+                a.checked_pow(b as u32).ok_or(RPNError::Overflow)?,
+            )),
             (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a.powf(b as f64))),
             (Self::Int(a), Self::Float(b)) => Ok(Self::Float((a as f64).powf(b))),
             (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a.powf(b))),
@@ -379,10 +374,13 @@ impl Num {
 
     /// Returns the modulo.
     fn modulo(self, rhs: Self) -> Result<Self, RPNError> {
+        if rhs.is_zero() {
+            return Err(RPNError::DivisionByZero);
+        }
         match (self, rhs) {
-            (_, Self::Int(0)) => Err(RPNError::DivisionByZero),
-            (_, Self::Float(b)) if b == 0.0 => Err(RPNError::DivisionByZero),
-            (Self::Int(a), Self::Int(b)) => Ok(Self::Int(a.rem_euclid(b))),
+            (Self::Int(a), Self::Int(b)) => Ok(Self::Int(
+                a.checked_rem_euclid(b).ok_or(RPNError::DivisionByZero)?,
+            )),
             (Self::Int(a), Self::Float(b)) => Ok(Self::Float((a as f64).rem_euclid(b))),
             (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a.rem_euclid(b as f64))),
             (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a.rem_euclid(b))),
@@ -391,10 +389,13 @@ impl Num {
 
     /// Returns the integer division.
     fn integer_division(self, rhs: Self) -> Result<Self, RPNError> {
+        if rhs.is_zero() {
+            return Err(RPNError::DivisionByZero);
+        }
         match (self, rhs) {
-            (_, Self::Int(0)) => Err(RPNError::DivisionByZero),
-            (_, Self::Float(b)) if b == 0.0 => Err(RPNError::DivisionByZero),
-            (Self::Int(a), Self::Int(b)) => Ok(Self::Int(a.div_euclid(b))),
+            (Self::Int(a), Self::Int(b)) => Ok(Self::Int(
+                a.checked_div_euclid(b).ok_or(RPNError::DivisionByZero)?,
+            )),
             (Self::Int(a), Self::Float(b)) => Ok(Self::Float((a as f64).div_euclid(b))),
             (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a.div_euclid(b as f64))),
             (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a.div_euclid(b))),
@@ -451,64 +452,75 @@ impl From<f64> for Num {
 }
 
 impl std::ops::Add for Num {
-    type Output = Self;
+    type Output = Result<Self, RPNError>;
 
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Self::Int(a), Self::Int(b)) => Self::Int(a + b),
-            (Self::Int(a), Self::Float(b)) => Self::Float(a as f64 + b),
-            (Self::Float(a), Self::Int(b)) => Self::Float(a + b as f64),
-            (Self::Float(a), Self::Float(b)) => Self::Float(a + b),
+            (Self::Int(a), Self::Int(b)) => {
+                Ok(Self::Int(a.checked_add(b).ok_or(RPNError::Overflow)?))
+            }
+            (Self::Int(a), Self::Float(b)) => Ok(Self::Float(a as f64 + b)),
+            (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a + b as f64)),
+            (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a + b)),
         }
     }
 }
 
 impl std::ops::Sub for Num {
-    type Output = Self;
+    type Output = Result<Self, RPNError>;
 
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Self::Int(a), Self::Int(b)) => Self::Int(a - b),
-            (Self::Int(a), Self::Float(b)) => Self::Float(a as f64 - b),
-            (Self::Float(a), Self::Int(b)) => Self::Float(a - b as f64),
-            (Self::Float(a), Self::Float(b)) => Self::Float(a - b),
+            (Self::Int(a), Self::Int(b)) => {
+                Ok(Self::Int(a.checked_sub(b).ok_or(RPNError::Overflow)?))
+            }
+            (Self::Int(a), Self::Float(b)) => Ok(Self::Float(a as f64 - b)),
+            (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a - b as f64)),
+            (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a - b)),
         }
     }
 }
 
 impl std::ops::Mul for Num {
-    type Output = Self;
+    type Output = Result<Self, RPNError>;
 
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Self::Int(a), Self::Int(b)) => Self::Int(a * b),
-            (Self::Int(a), Self::Float(b)) => Self::Float(a as f64 * b),
-            (Self::Float(a), Self::Int(b)) => Self::Float(a * b as f64),
-            (Self::Float(a), Self::Float(b)) => Self::Float(a * b),
+            (Self::Int(a), Self::Int(b)) => {
+                Ok(Self::Int(a.checked_mul(b).ok_or(RPNError::Overflow)?))
+            }
+            (Self::Int(a), Self::Float(b)) => Ok(Self::Float(a as f64 * b)),
+            (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a * b as f64)),
+            (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a * b)),
         }
     }
 }
 
 impl std::ops::Div for Num {
-    type Output = Self;
+    type Output = Result<Self, RPNError>;
 
     fn div(self, rhs: Self) -> Self::Output {
+        if rhs.is_zero() {
+            return Err(RPNError::DivisionByZero);
+        }
         match (self, rhs) {
-            (Self::Int(a), Self::Int(b)) => Self::Float(a as f64 / b as f64),
-            (Self::Int(a), Self::Float(b)) => Self::Float(a as f64 / b),
-            (Self::Float(a), Self::Int(b)) => Self::Float(a / b as f64),
-            (Self::Float(a), Self::Float(b)) => Self::Float(a / b),
+            (Self::Int(a), Self::Int(b)) => {
+                Ok(Self::Int(a.checked_div(b).ok_or(RPNError::Overflow)?))
+            }
+            (Self::Int(a), Self::Float(b)) => Ok(Self::Float(a as f64 / b)),
+            (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a / b as f64)),
+            (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a / b)),
         }
     }
 }
 
 impl std::ops::Neg for Num {
-    type Output = Self;
+    type Output = Result<Self, RPNError>;
 
     fn neg(self) -> Self::Output {
         match self {
-            Self::Int(a) => Self::Int(-a),
-            Self::Float(a) => Self::Float(-a),
+            Self::Int(a) => Ok(Self::Int(a.checked_neg().ok_or(RPNError::Overflow)?)),
+            Self::Float(a) => Ok(Self::Float(-a)),
         }
     }
 }
@@ -550,7 +562,6 @@ pub enum Op {
     BitwiseOr,
     BitwiseXor,
     BitwiseNand,
-    BitwiseNot,
     ShiftLeft,
     ShiftRight,
 }
@@ -768,10 +779,7 @@ mod tests {
 
     #[test]
     fn divide_works() {
-        run_and_compare_stack(
-            &[Op::Push(12.into()), Op::Push(4.into()), Op::Divide],
-            [3.0],
-        );
+        run_and_compare_stack(&[Op::Push(12.into()), Op::Push(4.into()), Op::Divide], [3]);
     }
 
     #[test]
@@ -852,19 +860,10 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "negative exponent")]
+    #[should_panic(expected = "overflow")]
     fn pow_refuses_negative_exponent() {
         run_and_compare_stack(
             &[Op::Push(2.into()), Op::Push((-4).into()), Op::Pow],
-            [16.0],
-        );
-    }
-
-    #[test]
-    #[should_panic(expected = "negative exponent")]
-    fn pow_refuses_negative_float_exponent() {
-        run_and_compare_stack(
-            &[Op::Push(2.into()), Op::Push((-4.0).into()), Op::Pow],
             [16.0],
         );
     }
@@ -1143,7 +1142,7 @@ mod tests {
     }
 
     #[test]
-    fn inivert_works() {
+    fn invert_works() {
         run_and_compare_stack(&[Op::Push(2.into()), Op::Invert], [0.5]);
     }
 
