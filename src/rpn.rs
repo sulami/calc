@@ -199,6 +199,15 @@ impl State {
                 let a = self.stack.pop().expect("failed to pop item from stack");
                 self.stack.push(a.square_root());
             }
+            Op::Logarithm => {
+                self.require_stack(2)?;
+                if let [a, b] = self.stack[stack_size - 2..stack_size] {
+                    (a.logarithm(b)).map(|result| {
+                        let _ = self.stack.pop().expect("failed to pop item from stack");
+                        let _ = std::mem::replace(&mut self.stack[stack_size - 2], result);
+                    })?;
+                };
+            }
             Op::NaturalLogarithm => {
                 self.require_stack(1)?;
                 let a = self.stack.pop().expect("failed to pop item from stack");
@@ -238,6 +247,10 @@ pub enum RPNError {
     RequiresStack(usize),
     /// Any of the dividing operations received a zero divisor.
     DivisionByZero,
+    /// log{b}(0) is -inifinity.
+    LogarithmOfZero,
+    /// log{1}(n) is inifinity.
+    LogarithmBaseOne,
     /// An operation over- or underflowed our internal number type.
     Overflow,
     /// Register for recall was not found.
@@ -254,6 +267,8 @@ impl Debug for RPNError {
             }
             Self::RequiresStack(size) => write!(f, "requires at least {size} items on the stack"),
             Self::DivisionByZero => write!(f, "division by zero"),
+            Self::LogarithmOfZero => write!(f, "logarithm of 0 is negative inifinity"),
+            Self::LogarithmBaseOne => write!(f, "logarithm with base 1 is ininity"),
             Self::Overflow => write!(f, "overflow"),
             Self::RegisterNotFound => write!(f, "register not found"),
         }
@@ -273,15 +288,6 @@ pub enum Num {
 }
 
 impl Num {
-    /// True if the wrapped value is zero.
-    fn is_zero(&self) -> bool {
-        match self {
-            Self::Int(0) => true,
-            Self::Float(f) => *f == 0.0,
-            _ => false,
-        }
-    }
-
     /// Returns 1/n.
     fn invert(self) -> Result<Self, RPNError> {
         Self::Float(1.0) / self
@@ -374,10 +380,8 @@ impl Num {
 
     /// Returns the modulo.
     fn modulo(self, rhs: Self) -> Result<Self, RPNError> {
-        if rhs.is_zero() {
-            return Err(RPNError::DivisionByZero);
-        }
         match (self, rhs) {
+            (_, Self::Int(0)) => return Err(RPNError::DivisionByZero),
             (Self::Int(a), Self::Int(b)) => Ok(Self::Int(
                 a.checked_rem_euclid(b).ok_or(RPNError::DivisionByZero)?,
             )),
@@ -389,16 +393,26 @@ impl Num {
 
     /// Returns the integer division.
     fn integer_division(self, rhs: Self) -> Result<Self, RPNError> {
-        if rhs.is_zero() {
-            return Err(RPNError::DivisionByZero);
-        }
         match (self, rhs) {
+            (_, Self::Int(0)) => return Err(RPNError::DivisionByZero),
             (Self::Int(a), Self::Int(b)) => Ok(Self::Int(
                 a.checked_div_euclid(b).ok_or(RPNError::DivisionByZero)?,
             )),
             (Self::Int(a), Self::Float(b)) => Ok(Self::Float((a as f64).div_euclid(b))),
             (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a.div_euclid(b as f64))),
             (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a.div_euclid(b))),
+        }
+    }
+
+    /// Returns the logarithm.
+    fn logarithm(self, rhs: Self) -> Result<Self, RPNError> {
+        match (self, rhs) {
+            (Self::Int(0), _) => return Err(RPNError::LogarithmOfZero),
+            (_, Self::Int(1)) => return Err(RPNError::LogarithmBaseOne),
+            (Self::Int(a), Self::Int(b)) => Ok(Self::Float((a as f64).log(b as f64))),
+            (Self::Int(a), Self::Float(b)) => Ok(Self::Float((a as f64).log(b))),
+            (Self::Float(a), Self::Int(b)) => Ok(Self::Float(a.log(b as f64))),
+            (Self::Float(a), Self::Float(b)) => Ok(Self::Float(a.log(b))),
         }
     }
 }
@@ -540,7 +554,7 @@ pub enum Op {
     Modulo,
     IntegerDivision,
     Pow,
-    Logrithm,
+    Logarithm,
     // Unary operators
     Negate,
     Absolute,
@@ -775,7 +789,18 @@ mod tests {
 
     #[test]
     fn divide_works() {
-        run_and_compare_stack(&[Op::Push(12.into()), Op::Push(4.into()), Op::Divide], [3]);
+        run_and_compare_stack(
+            &[Op::Push(12.into()), Op::Push(4.into()), Op::Divide],
+            [3.0],
+        );
+    }
+
+    #[test]
+    fn divide_coerces_integers_to_floats() {
+        run_and_compare_stack(
+            &[Op::Push(10.into()), Op::Push(4.into()), Op::Divide],
+            [2.5],
+        );
     }
 
     #[test]
@@ -1018,15 +1043,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "division by zero")]
-    fn modulo_refuses_negative_float_divisor() {
-        run_and_compare_stack(
-            &[Op::Push(2.into()), Op::Push((0.0).into()), Op::Modulo],
-            [16.0],
-        );
-    }
-
-    #[test]
     fn modulo_keeps_stack_intact_on_error() {
         let ops = &[Op::Push(2.into()), Op::Push((0).into()), Op::Modulo];
         let mut state = State::default();
@@ -1133,5 +1149,31 @@ mod tests {
     #[should_panic(expected = "requires at least 1 item on the stack")]
     fn invert_errors_on_empty_stack() {
         run_and_compare_stack(&[Op::Invert], [3]);
+    }
+
+    #[test]
+    fn logarithm_works() {
+        run_and_compare_stack(
+            &[Op::Push(100.into()), Op::Push(10.into()), Op::Logarithm],
+            [2.0],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "logarithm of 0")]
+    fn logarithm_refuses_zero_arg() {
+        run_and_compare_stack(
+            &[Op::Push(0.into()), Op::Push(10.into()), Op::Logarithm],
+            [2.0],
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "logarithm with base 1")]
+    fn logarithm_refuses_base_1() {
+        run_and_compare_stack(
+            &[Op::Push(10.into()), Op::Push(1.into()), Op::Logarithm],
+            [2.0],
+        );
     }
 }

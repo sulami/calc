@@ -150,6 +150,10 @@ fn normal_mode_handler(mut state: State, event: Event) -> Result<State> {
                 state = insert_input(state);
                 state = try_op(state, Op::NaturalLogarithm);
             }
+            '_' => {
+                state = insert_input(state);
+                state = try_op(state, Op::Logarithm);
+            }
             'n' => {
                 state = insert_input(state);
                 state = try_op(state, Op::Negate);
@@ -410,6 +414,7 @@ fn draw_help_screen(f: &mut Frame<CrosstermBackend<io::Stdout>>) {
         Row::new(vec!["\\", "invert (1/x)"]),
         Row::new(vec!["^", "power"]),
         Row::new(vec!["L", "ln"]),
+        Row::new(vec!["_", "logarithm base x"]),
         Row::new(vec!["V", "square root"]),
         Row::new(vec!["A", "absolute"]),
         Row::new(vec!["%", "modulo"]),
@@ -612,6 +617,11 @@ fn format_history_event(state: &rpn::State, op: &Op, base: Base) -> String {
         Op::Tangent => format!("tan {}", format_num(state.stack_last().unwrap(), base)),
         Op::SquareRoot => format!("√ {}", format_num(state.stack_last().unwrap(), base)),
         Op::NaturalLogarithm => format!("ln {}", format_num(state.stack_last().unwrap(), base)),
+        Op::Logarithm => format!(
+            "log{{{}}}({})",
+            format_num(state.stack_get(stack_size - 2).unwrap(), base),
+            format_num(state.stack_get(stack_size - 1).unwrap(), base)
+        ),
         Op::Invert => format!("1 / {}", format_num(state.stack_last().unwrap(), base)),
         _ => format!("{state:?} -> {op:?}"),
     }
