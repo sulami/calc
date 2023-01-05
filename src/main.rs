@@ -1,6 +1,7 @@
 use std::io;
 
 use anyhow::Result;
+use copypasta::{ClipboardContext, ClipboardProvider};
 use crossterm::{
     event::{read, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent},
     execute,
@@ -191,6 +192,16 @@ fn normal_mode_handler(mut state: State, event: Event) -> Result<State> {
                 state = insert_input(state);
                 state.message = Some("enter register name".to_string());
                 state.mode = Mode::RecallRegister;
+            }
+            'y' => {
+                state = insert_input(state);
+                let stack_top: rpn::Num = *state.calc_state.stack_last().unwrap_or(&0.into());
+                let formatted = format_num(&stack_top, state.base);
+                state.message = Some(format!("yanked: {formatted}"));
+                ClipboardContext::new()
+                    .expect("failed to create clipboard context")
+                    .set_contents(formatted)
+                    .expect("failed to insert clipboard contents");
             }
             '+' => {
                 state = insert_input(state);
@@ -416,6 +427,7 @@ fn draw_help_screen(f: &mut Frame<CrosstermBackend<io::Stdout>>) {
         Row::new(vec!["q", "rotate stack"]).bottom_margin(1),
         Row::new(vec!["k <key>", "store to register"]),
         Row::new(vec!["l <key>", "recall from register"]).bottom_margin(1),
+        Row::new(vec!["y", "yank to clipboard"]).bottom_margin(1),
         Row::new(vec!["E", "push euler's number"]),
         Row::new(vec!["P", "push pi"]),
         Row::new(vec!["#", "push random float 0<f<1"]),
